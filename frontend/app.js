@@ -74,15 +74,130 @@ const state = {
 const cssVar = (name) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const CATEGORY_COLORS = {
-  necessary:  cssVar('--necessary'),
-  functional: cssVar('--functional'),
-  analytics:  cssVar('--analytics'),
-  marketing:  cssVar('--marketing'),
-  unknown:    cssVar('--unknown'),
-};
+/*
+  ⚠ `let`, not `const`, and refreshed on every theme change.
+
+  The dark theme redefines --marketing, --analytics and so on. If we computed
+  this object once at load and never again, the charts would keep light-theme
+  colours after switching to dark — bright bars on a near-black background.
+
+  `refreshColors()` is called from applyTheme() before anything redraws.
+*/
+let CATEGORY_COLORS = {};
+
+function refreshColors() {
+  CATEGORY_COLORS = {
+    necessary:  cssVar('--necessary'),
+    functional: cssVar('--functional'),
+    analytics:  cssVar('--analytics'),
+    marketing:  cssVar('--marketing'),
+    unknown:    cssVar('--unknown'),
+  };
+}
+refreshColors();
 
 const CATEGORY_ORDER = ['necessary', 'functional', 'analytics', 'marketing', 'unknown'];
+
+// GDPR transfer-risk regions, ordered least to most concerning.
+const REGION_COLORS = () => ({
+  'EEA':        cssVar('--region-eea'),
+  'Adequate':   cssVar('--region-adequate'),
+  'US (DPF)':   cssVar('--region-dpf'),
+  'Restricted': cssVar('--region-restricted'),
+});
+
+
+/* ==========================================================================
+   1b. THEME (dark / light)
+   ==========================================================================
+
+   HOW IT WORKS
+   ------------
+   We set one attribute on <html>:
+
+       document.documentElement.setAttribute('data-theme', 'dark');
+
+   CSS does the rest, because `[data-theme="dark"]` redefines the colour
+   variables and every rule already reads them via var(). No class juggling on
+   individual elements, no second stylesheet.
+
+   THE THREE-WAY PREFERENCE
+   ------------------------
+       1. an explicit saved choice        (localStorage)   ← always wins
+       2. otherwise, the OS setting       (prefers-color-scheme)
+       3. otherwise, light
+
+   Respecting the OS default matters: someone who runs their machine in dark
+   mode shouldn't be flashbanged on first visit. But once they click the
+   toggle, that choice must persist and override the system — which is why we
+   only set the attribute when there IS an explicit choice, letting the CSS
+   media query handle case 2.
+
+   WHY localStorage
+   ----------------
+   A key-value store in the browser that survives closing the tab. Note the
+   irony, and be ready for it in an interview: localStorage is itself a
+   tracking-capable technology. Ours holds one string ('dark'), is
+   first-party, and stores nothing about the person — so it's a functional
+   preference. Under our own classifier it would be `functional`, and on a
+   real site it would require consent.
+*/
+
+const THEME_KEY = 'cookieguard-theme';
+
+function applyTheme(theme) {
+  if (theme) {
+    document.documentElement.setAttribute('data-theme', theme);
+  } else {
+    // Removing the attribute hands control back to the OS media query.
+    document.documentElement.removeAttribute('data-theme');
+  }
+  refreshColors();          // pick up the new theme's variable values
+  const btn = $('#theme-toggle');
+  if (btn) {
+    const isDark = resolvedTheme() === 'dark';
+    btn.textContent = isDark ? '☀️' : '🌙';
+    btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
+  }
+}
+
+/** What theme are we actually showing right now, explicit or inherited? */
+function resolvedTheme() {
+  const explicit = document.documentElement.getAttribute('data-theme');
+  if (explicit) return explicit;
+  // matchMedia lets JS ask the same question a CSS media query asks.
+  return window.matchMedia('(prefers-color-scheme: dark)').matches
+    ? 'dark' : 'light';
+}
+
+function initTheme() {
+  let saved = null;
+  try {
+    saved = localStorage.getItem(THEME_KEY);
+  } catch (e) {
+    /* localStorage can throw in private mode or if storage is disabled.
+       A missing theme preference must never break the dashboard. */
+  }
+  applyTheme(saved);
+
+  $('#theme-toggle').onclick = () => {
+    const next = resolvedTheme() === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    try { localStorage.setItem(THEME_KEY, next); } catch (e) { /* ignore */ }
+
+    /*
+      ⚠ CHARTS MUST BE REDRAWN.
+      D3 reads colours from CSS at DRAW time and bakes them into SVG `fill`
+      attributes. Those attributes don't re-evaluate when the variables change,
+      so existing charts would keep their old colours — dark background,
+      light-theme bars. Redrawing is the fix.
+
+      This is the one real cost of reading theme colours in JavaScript rather
+      than styling SVG purely with CSS classes.
+    */
+    if (state.currentReport) redrawCharts();
+  };
+}
 
 
 /* ==========================================================================
@@ -327,6 +442,7 @@ async function handleScanSubmit(event) {
 
   const url  = $('#scan-url').value.trim();
   const wait = parseInt($('#scan-wait').value, 10);
+  const acceptConsent = $('#scan-accept-consent').checked;
   if (!url) return;
 
   const btn     = $('#scan-btn');
@@ -347,23 +463,37 @@ async function handleScanSubmit(event) {
   show(spinner, true);
   btnText.textContent = 'Scanning…';
   status.className = 'scan-status alert-info';
-  status.textContent = `Opening a browser and loading ${url}… this takes ${wait + 10}s or so.`;
+  status.textContent = acceptConsent
+    ? `Scanning ${url}, then clicking "Accept all" and scanning again… `
+      + `this takes about ${wait * 2 + 20}s.`
+    : `Opening a browser and loading ${url}… this takes ${wait + 10}s or so.`;
   show(status, true);
 
   try {
     const result = await api('/api/scan', {
       method: 'POST',
-      body: JSON.stringify({ url, wait_seconds: wait, save: true }),
+      body: JSON.stringify({
+        url, wait_seconds: wait, save: true, accept_consent: acceptConsent,
+      }),
     });
 
     const c = result.compliance || {};
+    const d = result.consent_diff;
     status.className = 'scan-status alert-success';
-    status.innerHTML = `
-      <strong>${esc(result.domain)}</strong> scanned —
-      ${result.cookie_count} cookies found,
-      score <strong>${c.score}/100 (${c.grade})</strong>.
-      ${c.cookies_requiring_consent} required consent but were set before it.
-      <button class="btn-link" id="goto-report">View report →</button>`;
+
+    let message = `<strong>${esc(result.domain)}</strong> scanned — `
+      + `score <strong>${c.score}/100 (${c.grade})</strong>. `
+      + `${c.cookies_requiring_consent} cookies required consent but were `
+      + `set before it.`;
+
+    if (d) {
+      message += `<br><br><strong>Accepting added ${d.added_count} more `
+        + `cookies</strong> — ${d.pre_consent_count} before, `
+        + `${d.post_consent_count} after`
+        + (d.multiplier ? ` (${d.multiplier}× more tracking)` : '') + '.';
+    }
+    message += ` <button class="btn-link" id="goto-report">View report →</button>`;
+    status.innerHTML = message;
 
     $('#goto-report').onclick = () => openReport(result.domain);
     $('#scan-url').value = '';
@@ -520,13 +650,267 @@ async function openReport(domain, switchTab = true) {
   }
 
   renderReportSummary();
+  renderConsentDiff();
   renderUnknowns();
+  renderFlowHeadline();
+  renderSecurityGauges();
 
   // Charts last: they need the SVG elements to have their final size, which
   // only happens once the surrounding layout has been rendered.
+  redrawCharts();
+}
+
+/** Redraw every chart. Called on load, tab switch, resize and theme change. */
+function redrawCharts() {
   drawDonutChart();
   drawVendorChart();
+  drawGlobe();             // async, but we don't await — it renders when ready
+  drawJurisdictionChart();
+  drawLifetimeChart();
+  drawTreemap();
   drawHistoryChart();
+}
+
+
+/* ==========================================================================
+   8b. PDF DOWNLOAD
+   ========================================================================== */
+
+/*
+  DOWNLOADING A FILE FROM AN API CALL.
+
+  The naive approach is `window.location = url`, which works but has a real
+  problem: if the server returns an ERROR, the browser navigates away from
+  your app to show it. The user loses their place, and you can't display a
+  friendly message.
+
+  So we fetch the file as a BLOB (binary data), then trigger the download
+  ourselves. That way we can catch failures and keep the user where they are.
+
+  The download itself uses a small trick: create an <a> element with the
+  `download` attribute pointing at a temporary object URL, click it
+  programmatically, then throw it away. There is no other API for "save this
+  data as a file" — this is genuinely the standard approach.
+*/
+async function downloadReportPdf() {
+  const domain = state.selectedDomain;
+  if (!domain) return;
+
+  const btn = $('#download-pdf');
+  const text = $('#pdf-btn-text');
+  const spinner = $('#pdf-spinner');
+
+  btn.disabled = true;
+  show(spinner, true);
+  text.textContent = 'Generating…';
+
+  try {
+    const res = await fetch(
+      `${API_BASE}/api/report/${encodeURIComponent(domain)}/pdf`
+    );
+    if (!res.ok) {
+      let detail = res.statusText;
+      try { detail = (await res.json()).detail || detail; } catch (e) { /* */ }
+      throw new Error(detail);
+    }
+
+    // The raw bytes.
+    const blob = await res.blob();
+
+    // A temporary in-memory URL pointing at those bytes.
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `cookieguard-${domain}.pdf`;   // the suggested filename
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    // Release the memory. Object URLs are NOT garbage-collected automatically
+    // — the browser holds the blob alive until you revoke the URL. Forgetting
+    // this leaks memory on every download.
+    URL.revokeObjectURL(url);
+
+    text.textContent = '✓ Downloaded';
+    setTimeout(() => { text.textContent = '⬇ Download PDF'; }, 2200);
+
+  } catch (err) {
+    text.textContent = '⬇ Download PDF';
+    alert(`Could not generate the PDF.\n\n${err.message}`);
+  } finally {
+    btn.disabled = false;
+    show(spinner, false);
+  }
+}
+
+
+/* ==========================================================================
+   8c. SCAN HISTORY PANEL
+   ========================================================================== */
+
+const historyState = {
+  page: 0,
+  pageSize: 20,
+  total: 0,
+  domain: '',
+  grade: '',
+  pendingDelete: null,     // the scan awaiting confirmation
+};
+
+async function loadHistory() {
+  const params = new URLSearchParams({
+    limit: historyState.pageSize,
+    offset: historyState.page * historyState.pageSize,
+  });
+  // URLSearchParams handles escaping for us. Building a query string by
+  // concatenation breaks the moment a value contains & or a space.
+  if (historyState.domain) params.set('domain', historyState.domain);
+  if (historyState.grade) params.set('grade', historyState.grade);
+
+  let data;
+  try {
+    data = await api(`/api/scans?${params}`);
+  } catch (err) {
+    return;
+  }
+
+  historyState.total = data.total;
+  renderHistoryTable(data.items);
+}
+
+function renderHistoryTable(scans) {
+  const tbody = $('#history-tbody');
+  show($('#history-empty-state'), scans.length === 0);
+
+  $('#history-count').textContent =
+    `${historyState.total} scan${historyState.total === 1 ? '' : 's'} recorded`;
+
+  tbody.innerHTML = scans.map((s) => {
+    const grade = s.compliance_grade || '—';
+    // A compact category breakdown as coloured blocks — readable at a glance
+    // without needing a legend on every row.
+    const breakdown = CATEGORY_ORDER.map((cat) => {
+      const n = s[`${cat}_count`] || 0;
+      if (!n) return '';
+      return `<span class="pill" style="background:${CATEGORY_COLORS[cat]};color:#fff"
+                    title="${cat}">${n}</span>`;
+    }).join('');
+
+    return `
+      <tr>
+        <td class="muted">${fmtDate(s.scanned_at)}</td>
+        <td><strong>${esc(s.domain)}</strong></td>
+        <td class="num">${s.cookie_count}</td>
+        <td>
+          <span class="badge" style="background:${gradeColor(grade)}">
+            ${s.compliance_score ?? '—'}/100 ${esc(grade)}
+          </span>
+        </td>
+        <td class="num">${s.cookies_requiring_consent}</td>
+        <td>${breakdown || '<span class="muted">—</span>'}</td>
+        <td>
+          <button class="btn-link" data-view-scan="${s.id}">View</button>
+          <button class="btn-link" style="color:var(--marketing)"
+                  data-delete-scan="${s.id}"
+                  data-domain="${esc(s.domain)}"
+                  data-when="${esc(fmtDate(s.scanned_at))}"
+                  data-cookies="${s.cookie_count}">Delete</button>
+        </td>
+      </tr>`;
+  }).join('');
+
+  // Event delegation again — one listener, survives every redraw.
+  tbody.onclick = (event) => {
+    const viewBtn = event.target.closest('[data-view-scan]');
+    if (viewBtn) {
+      switchView('inventory');
+      loadScanDirect(parseInt(viewBtn.dataset.viewScan, 10));
+      return;
+    }
+    const delBtn = event.target.closest('[data-delete-scan]');
+    if (delBtn) openDeleteModal(delBtn.dataset);
+  };
+
+  // ---- pager ----
+  const pages = Math.ceil(historyState.total / historyState.pageSize);
+  show($('#history-pager'), pages > 1);
+  $('#history-page-label').textContent =
+    `Page ${historyState.page + 1} of ${pages || 1}`;
+  $('#history-prev').disabled = historyState.page === 0;
+  $('#history-next').disabled = historyState.page >= pages - 1;
+}
+
+/** Load one scan into the inventory view, without needing its domain first. */
+async function loadScanDirect(scanId) {
+  try {
+    state.currentScan = await api(`/api/scans/${scanId}`);
+  } catch (err) {
+    return;
+  }
+  state.selectedDomain = state.currentScan.domain;
+  state.scans = await api(
+    `/api/domains/${encodeURIComponent(state.currentScan.domain)}/scans`
+  ).catch(() => []);
+  populateScanSelect();
+  $('#inventory-scan-select').value = String(scanId);
+  renderInventoryStats();
+  renderCookies();
+}
+
+
+/* ---- The delete confirmation flow ----
+   Deletion is IRREVERSIBLE and CASCADES to every cookie row. A single
+   mis-click must not be able to destroy audit history.
+
+   The dialog names the SPECIFIC scan — domain, date, cookie count — rather
+   than asking a generic "are you sure?". A confirmation you can dismiss
+   without reading isn't a confirmation, it's a speed bump. */
+
+function openDeleteModal(data) {
+  historyState.pendingDelete = parseInt(data.deleteScan, 10);
+  $('#delete-detail').innerHTML =
+    `<strong>${esc(data.domain)}</strong> — scanned ${esc(data.when)},
+     containing <strong>${esc(data.cookies)}</strong> cookie records.`;
+  show($('#delete-modal'), true);
+  // Focus Cancel, not Delete. The SAFE option should be the one that a stray
+  // Enter keypress selects.
+  $('#delete-cancel').focus();
+}
+
+function closeDeleteModal() {
+  historyState.pendingDelete = null;
+  show($('#delete-modal'), false);
+}
+
+async function confirmDelete() {
+  const id = historyState.pendingDelete;
+  if (!id) return;
+
+  const btn = $('#delete-confirm');
+  btn.disabled = true;
+  btn.textContent = 'Deleting…';
+
+  try {
+    await api(`/api/scans/${id}`, { method: 'DELETE' });
+    closeDeleteModal();
+    await loadHistory();
+    await loadDomains();     // counts and averages have changed
+  } catch (err) {
+    alert(`Could not delete the scan.\n\n${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Delete scan';
+  }
+}
+
+function populateHistoryFilters() {
+  const sel = $('#history-domain-filter');
+  const current = sel.value;
+  sel.innerHTML = '<option value="">All domains</option>' +
+    state.domains.map((d) =>
+      `<option value="${esc(d.domain)}">${esc(d.domain)}</option>`).join('');
+  sel.value = current;      // preserve the selection across a refresh
 }
 
 function renderReportSummary() {
@@ -565,6 +949,78 @@ function renderReportSummary() {
       </p>
     </div>`;
 }
+
+/* ---- The consent diff panel ----
+   The headline finding: what accepting actually costs you.
+
+   Shown only when the LATEST scan did a second pass. Older scans predate the
+   feature and simply have nothing to show — so we hide the card entirely
+   rather than render an empty one. */
+
+function renderConsentDiff() {
+  const card = $('#consent-diff-card');
+  const latest = state.currentReport?.latest_scan;
+
+  if (!latest || !latest.consent_clicked) {
+    show(card, false);
+    return;
+  }
+  show(card, true);
+
+  const before = latest.pre_consent_count ?? 0;
+  const after  = latest.post_consent_count ?? 0;
+  const added  = latest.cookies_added_by_consent ?? 0;
+  const mult   = latest.consent_multiplier;
+  const verdict = latest.consent_verdict || 'unknown';
+
+  const verdictText = {
+    compliant: 'No non-necessary cookies were set before consent. '
+             + 'This is the behaviour the law requires.',
+    minor: 'A small number of non-necessary cookies were set before any '
+         + 'consent was given.',
+    major: 'Non-necessary cookies were set before any consent was given — '
+         + 'tracking began before permission was obtained.',
+  }[verdict] || 'Consent state could not be determined.';
+
+  $('#consent-diff-body').innerHTML = `
+    <div class="diff-compare">
+      <div class="diff-side">
+        <div class="diff-number" style="color:var(--necessary)">${before}</div>
+        <div class="diff-label">Before consent</div>
+        <div class="diff-sub">What loads if you touch nothing</div>
+      </div>
+      <div class="diff-arrow">
+        <div class="diff-arrow-symbol">→</div>
+        ${mult ? `<div class="diff-multiplier">${mult}× more</div>` : ''}
+      </div>
+      <div class="diff-side after">
+        <div class="diff-number" style="color:var(--marketing)">${after}</div>
+        <div class="diff-label">After "Accept all"</div>
+        <div class="diff-sub">+${added} cookies unlocked</div>
+      </div>
+    </div>
+
+    <div class="diff-verdict verdict-${esc(verdict)}">
+      <strong>${esc(verdict.charAt(0).toUpperCase() + verdict.slice(1))}.</strong>
+      ${verdictText}
+    </div>
+
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <span class="consent-badge">
+        Banner found via <strong>${esc(latest.consent_method || '—')}</strong>
+      </span>
+      ${latest.consent_detail
+        ? `<span class="consent-badge">${esc(latest.consent_detail)}</span>` : ''}
+    </div>
+
+    <p class="muted small" style="margin-top:12px">
+      The compliance score above is calculated on the <strong>pre-consent</strong>
+      cookies only. Cookies that appear after an explicit "Accept all" are
+      consented to, and scoring them would penalise a site for honouring
+      consent correctly.
+    </p>`;
+}
+
 
 function renderUnknowns() {
   const unknowns = state.currentReport.unknown_cookies || [];
@@ -850,6 +1306,897 @@ function drawVendorChart() {
 }
 
 
+/* ---- The "data leaves the EEA" headline -------------------------------- */
+
+function renderFlowHeadline() {
+  const df = state.currentReport.data_flows || {};
+  const pct = df.outside_eea_pct ?? 0;
+
+  // Colour the number by severity — the figure should read at a glance.
+  const colour = pct >= 75 ? cssVar('--marketing')
+               : pct >= 40 ? cssVar('--analytics')
+               : cssVar('--necessary');
+
+  $('#flow-headline').innerHTML = `
+    <div class="flow-big" style="color:${colour}">${pct}%</div>
+    <div class="flow-text">
+      <strong>${df.outside_eea ?? 0} of ${df.total_cookies ?? 0}</strong>
+      cookies come from vendors headquartered outside the EEA.
+      ${pct > 0
+        ? `Each is an international data transfer under GDPR Chapter V and
+           needs a documented legal basis.`
+        : `All vendors are within the EEA — no Chapter V transfer analysis needed.`}
+    </div>`;
+}
+
+
+/* ==========================================================================
+   THE GLOBE
+   ==========================================================================
+
+   A hybrid of three classic D3 examples:
+
+       world-tour          auto-rotation, sequential country highlighting
+       versor-dragging     mouse-interactive orthographic globe
+       zoom-to-bounding-box  click a country to fly to it
+
+   FIVE CONCEPTS
+   -------------
+
+   1. ORTHOGRAPHIC PROJECTION
+      Renders the Earth as it looks from space — a real sphere, with a far
+      side you cannot see. Every other projection flattens the globe into a
+      rectangle and has to distort something. Orthographic distorts nothing
+      at the centre and simply hides the back.
+
+      That's exactly right here: we're not comparing land areas, we're
+      showing WHERE data goes. A sphere is the honest shape.
+
+   2. ROTATION IS THREE ANGLES
+          projection.rotate([lambda, phi, gamma])
+            lambda  spin around the poles (longitude)  ← what auto-rotation changes
+            phi     tilt north/south (latitude)
+            gamma   roll
+
+      Rotating the PROJECTION rather than the SVG is the key idea. We are not
+      spinning a picture — we recompute which parts of the sphere face us, so
+      the far side genuinely disappears.
+
+   3. d3.timer FOR ANIMATION
+      A requestAnimationFrame loop that runs every frame (~60/second). Better
+      than setInterval: it pauses when the tab is hidden, and syncs to the
+      display refresh so motion is smooth.
+
+   4. VERSOR DRAGGING (quaternions)
+      The naive approach — "mouse moved 10px right, add 10 to lambda" —
+      breaks badly near the poles. Drag over the top of the globe and it
+      spins wildly, because longitude lines converge there.
+
+      A QUATERNION represents a rotation as a single object rather than three
+      separate angles, which removes that problem entirely. We compute the
+      rotation that moves the point you grabbed to the point you dragged to,
+      and apply it. The globe then follows your cursor exactly.
+
+      That's the whole idea; the maths is ~40 lines below.
+
+   5. FLY-TO ON CLICK
+      d3.geoInterpolate walks along the great circle between two points, so
+      the globe takes the shortest real path — as an aeroplane would — rather
+      than sliding in a straight line across a flat map.
+   ========================================================================== */
+
+/* ---- Minimal quaternion helpers (the "versor" technique) --------------- */
+/*
+   Inlined rather than pulling versor.js from a CDN — it is 40 lines, and one
+   fewer network dependency is one fewer thing that can fail offline.
+
+   You do NOT need to derive quaternion algebra to use this. What matters:
+
+     cartesian()  spherical coordinates (lon, lat) → a 3D point on a unit sphere
+     delta()      the rotation that turns one 3D point into another
+     multiply()   combine two rotations into one
+     toAngles()   convert a rotation back into the [lambda, phi, gamma] D3 wants
+*/
+const versor = {
+  // (longitude, latitude) in degrees → an [x, y, z] point on the unit sphere.
+  cartesian([lon, lat]) {
+    const l = lon * Math.PI / 180, p = lat * Math.PI / 180, cp = Math.cos(p);
+    return [cp * Math.cos(l), cp * Math.sin(l), Math.sin(p)];
+  },
+
+  // The quaternion rotating unit vector v0 onto v1.
+  delta(v0, v1, alpha = 1) {
+    const w = [
+      v0[1] * v1[2] - v0[2] * v1[1],     // cross product gives the AXIS
+      v0[2] * v1[0] - v0[0] * v1[2],     // of rotation
+      v0[0] * v1[1] - v0[1] * v1[0],
+    ];
+    const wLen = Math.hypot(...w);
+    if (!wLen) return [1, 0, 0, 0];      // identical vectors → no rotation
+    // dot product gives the ANGLE between them
+    const t = alpha * Math.acos(Math.max(-1, Math.min(1, v0[0] * v1[0] + v0[1] * v1[1] + v0[2] * v1[2]))) / 2;
+    const s = Math.sin(t);
+    return [Math.cos(t), (w[2] / wLen) * s, (-w[1] / wLen) * s, (w[0] / wLen) * s];
+  },
+
+  // Combine two rotations. Order matters — rotations don't commute.
+  multiply([a0, a1, a2, a3], [b0, b1, b2, b3]) {
+    return [
+      a0 * b0 - a1 * b1 - a2 * b2 - a3 * b3,
+      a0 * b1 + a1 * b0 + a2 * b3 - a3 * b2,
+      a0 * b2 - a1 * b3 + a2 * b0 + a3 * b1,
+      a0 * b3 + a1 * b2 - a2 * b1 + a3 * b0,
+    ];
+  },
+
+  // Quaternion → the three Euler angles D3's projection.rotate() expects.
+  toAngles([l, a, b, c]) {
+    return [
+      Math.atan2(2 * (l * a + b * c), 1 - 2 * (a * a + b * b)) * 180 / Math.PI,
+      Math.asin(Math.max(-1, Math.min(1, 2 * (l * b - c * a)))) * 180 / Math.PI,
+      Math.atan2(2 * (l * c + a * b), 1 - 2 * (b * b + c * c)) * 180 / Math.PI,
+    ];
+  },
+
+  // The quaternion equivalent of a given [lambda, phi, gamma] rotation.
+  fromAngles([l, p, g]) {
+    l = l * Math.PI / 360; p = p * Math.PI / 360; g = (g || 0) * Math.PI / 360;
+    const sl = Math.sin(l), cl = Math.cos(l);
+    const sp = Math.sin(p), cp = Math.cos(p);
+    const sg = Math.sin(g), cg = Math.cos(g);
+    return [
+      cl * cp * cg + sl * sp * sg,
+      sl * cp * cg - cl * sp * sg,
+      cl * sp * cg + sl * cp * sg,
+      cl * cp * sg - sl * sp * cg,
+    ];
+  },
+};
+
+
+/* ---- Globe state ------------------------------------------------------- */
+
+let worldAtlas = null;
+let worldAtlasFailed = false;
+
+const globe = {
+  timer: null,          // the d3.timer driving auto-rotation
+  projection: null,
+  path: null,
+  svg: null,
+  countriesById: new Map(),
+  selected: null,       // ISO numeric id of the focused country
+  spinning: true,
+  idleTimeout: null,
+  baseScale: 1,
+};
+
+const SPIN_SPEED = 4;         // degrees of longitude per second — slow enough
+                              // to read, fast enough to feel alive
+const IDLE_BEFORE_RESPIN = 4000;   // ms of no interaction before spinning resumes
+
+
+async function loadWorldAtlas() {
+  if (worldAtlas || worldAtlasFailed) return worldAtlas;
+  try {
+    const topo = await d3.json(
+      'https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json'
+    );
+    worldAtlas = topojson.feature(topo, topo.objects.countries);
+    return worldAtlas;
+  } catch (err) {
+    worldAtlasFailed = true;
+    return null;
+  }
+}
+
+
+/** Stop auto-rotation, and schedule it to resume once the user is idle. */
+function pauseSpin() {
+  globe.spinning = false;
+  const hint = $('#globe-hint');
+  if (hint) hint.classList.add('faded');
+  clearTimeout(globe.idleTimeout);
+  // Don't resume while a country is selected — the user is reading it.
+  globe.idleTimeout = setTimeout(() => {
+    if (!globe.selected) globe.spinning = true;
+  }, IDLE_BEFORE_RESPIN);
+}
+
+
+async function drawGlobe() {
+  if (!d3Available() || typeof topojson === 'undefined') {
+    show($('#globe-fallback'), true);
+    return;
+  }
+
+  const svg = d3.select('#globe');
+  svg.selectAll('*').remove();
+  if (globe.timer) globe.timer.stop();
+
+  const countries = state.currentReport?.data_flows?.countries || [];
+  renderCountryList(countries);
+  renderVendorFlows();
+  if (!countries.length) return;
+
+  const atlas = await loadWorldAtlas();
+  if (!atlas) { show($('#globe-fallback'), true); return; }
+  show($('#globe-fallback'), false);
+
+  const node = svg.node();
+  const box = node.getBoundingClientRect();
+  const width = box.width || 440;
+  const height = 440;
+  // Leave a margin so the halo isn't clipped at the edges.
+  const radius = Math.min(width, height) / 2 - 14;
+
+  // Lookup: ISO numeric id → our data. Numeric ids, never names (§73).
+  globe.countriesById = new Map();
+  countries.forEach((c) => {
+    if (c.iso_numeric) globe.countriesById.set(String(Number(c.iso_numeric)), c);
+  });
+
+  const projection = d3.geoOrthographic()
+    .scale(radius)
+    .translate([width / 2, height / 2])
+    .rotate([0, -12, 0])       // a slight northward tilt looks more natural
+                               // than staring at the equator dead-on
+    .clipAngle(90);            // ← THE ORTHOGRAPHIC ESSENTIAL. Hides everything
+                               // more than 90° away, i.e. the far side of the
+                               // planet. Without it the back shows through.
+
+  const path = d3.geoPath(projection);
+  const regionColor = REGION_COLORS();
+
+  globe.projection = projection;
+  globe.path = path;
+  globe.svg = svg;
+  globe.baseScale = radius;
+  globe.selected = null;
+
+  // ---- gradient + glow filter, defined once in <defs> ----
+  const defs = svg.append('defs');
+
+  // An SVG filter that paints a coloured blur behind whatever it's applied to.
+  // Used to make the selected country glow. `flood-color` is set per-use in
+  // flyTo(), so one filter serves every region colour.
+  const glow = defs.append('filter')
+    .attr('id', 'country-glow')
+    .attr('x', '-60%').attr('y', '-60%')      // room for the blur to spread;
+    .attr('width', '220%').attr('height', '220%');  // the default box clips it
+  glow.append('feDropShadow')
+    .attr('dx', 0).attr('dy', 0)
+    .attr('stdDeviation', 3.5)
+    .attr('flood-color', cssVar('--brand'))
+    .attr('flood-opacity', 0.95);
+  const grad = defs.append('radialGradient')
+    .attr('id', 'ocean-gradient')
+    .attr('cx', '35%').attr('cy', '30%');    // offset centre = a light source
+  grad.append('stop').attr('offset', '0%')
+      .attr('stop-color', cssVar('--surface'));
+  grad.append('stop').attr('offset', '100%')
+      .attr('stop-color', cssVar('--bg'));
+
+  // ---- the sphere ----
+  svg.append('path')
+    .datum({ type: 'Sphere' })
+    .attr('class', 'globe-ocean')
+    .attr('fill', 'url(#ocean-gradient)')
+    .attr('d', path);
+
+  // A halo ring just outside the sphere. Cheap, and it makes the globe read
+  // as an object floating in space rather than a circle stuck on the page.
+  svg.append('circle')
+    .attr('class', 'globe-halo')
+    .attr('cx', width / 2).attr('cy', height / 2).attr('r', radius + 5)
+    .attr('stroke', cssVar('--brand'))
+    .attr('stroke-width', 2.5);
+
+  svg.append('path')
+    .datum(d3.geoGraticule10())
+    .attr('class', 'globe-graticule')
+    .attr('d', path);
+
+  // ---- countries ----
+  const land = svg.append('g').selectAll('path')
+    .data(atlas.features)
+    .join('path')
+      .attr('class', (d) => globe.countriesById.has(String(d.id))
+        ? 'globe-land globe-land-data' : 'globe-land')
+      .attr('fill', (d) => {
+        const info = globe.countriesById.get(String(d.id));
+        return info ? (regionColor[info.region] || cssVar('--unknown'))
+                    : cssVar('--border');
+      })
+      .attr('d', path)
+      .on('mousemove', function (event, d) {
+        const info = globe.countriesById.get(String(d.id));
+        if (!info) return;
+        showTooltip(event, `
+          <strong>${esc(info.country)}</strong>
+          ${info.cookie_count} cookies · ${info.vendor_count} vendor(s)<br>
+          <span style="opacity:.8">${esc(info.region)}</span><br>
+          <span style="opacity:.6;font-size:.9em">click to zoom</span>`);
+      })
+      .on('mouseleave', hideTooltip)
+      .on('click', (event, d) => {
+        const info = globe.countriesById.get(String(d.id));
+        if (info) flyTo(info, d);
+      });
+
+  /** Recompute every path. Called on each animation frame and each drag move. */
+  function render() {
+    svg.selectAll('path').attr('d', path);
+  }
+  globe.render = render;
+
+  // ---- auto-rotation ----
+  // d3.timer runs a callback every animation frame. `elapsed` is milliseconds
+  // since it started. We track the previous value so speed is time-based, not
+  // frame-based — otherwise a fast machine spins faster than a slow one.
+  let lastElapsed = 0;
+  globe.timer = d3.timer((elapsed) => {
+    const delta = elapsed - lastElapsed;
+    lastElapsed = elapsed;
+    if (!globe.spinning) return;
+    const r = projection.rotate();
+    projection.rotate([r[0] + (SPIN_SPEED * delta) / 1000, r[1], r[2]]);
+    render();
+  });
+
+  // ---- drag ----
+  // v0/q0 capture the state when the drag STARTS; each move computes the
+  // rotation from the original grab point to the current pointer, which is
+  // what makes the globe follow the cursor precisely.
+  let v0, q0, r0;
+
+  svg.call(d3.drag()
+    .on('start', (event) => {
+      pauseSpin();
+      svg.classed('dragging', true);
+      r0 = projection.rotate();
+      q0 = versor.fromAngles(r0);
+      // invert() converts a screen pixel back into a lon/lat on the globe.
+      const inv = projection.invert([event.x, event.y]);
+      v0 = inv ? versor.cartesian(inv) : null;
+    })
+    .on('drag', (event) => {
+      if (!v0) return;
+      // Where is the pointer now, in globe coordinates? We invert using the
+      // ORIGINAL rotation, so we're asking "which point did the user grab".
+      projection.rotate(r0);
+      const inv = projection.invert([event.x, event.y]);
+      if (!inv) return;
+      const v1 = versor.cartesian(inv);
+      // Combine the starting rotation with the one that moves v0 → v1.
+      const q1 = versor.multiply(q0, versor.delta(v0, v1));
+      projection.rotate(versor.toAngles(q1));
+      render();
+    })
+    .on('end', () => {
+      svg.classed('dragging', false);
+      pauseSpin();
+    })
+  );
+
+  // Clicking empty ocean deselects.
+  svg.on('click', (event) => {
+    if (event.target === node || event.target.classList.contains('globe-ocean')) {
+      clearGlobeSelection();
+    }
+  });
+
+  render();
+}
+
+
+/* ---- Fly to a country --------------------------------------------------
+   Two things animate together: the ROTATION (so the country faces us) and
+   the SCALE (so we zoom in). Doing both in one transition is what makes it
+   feel like a camera move rather than two separate effects. */
+
+function flyTo(info, feature) {
+  if (!globe.projection) return;
+
+  globe.spinning = false;
+  globe.selected = String(feature.id);
+  clearTimeout(globe.idleTimeout);
+
+  // Highlight IMMEDIATELY, before the camera starts moving.
+  // Waiting until the flight ends makes the click feel unacknowledged for a
+  // whole second — the response should be instant even if the motion isn't.
+  const regionColour = REGION_COLORS()[info.region] || cssVar('--unknown');
+  globe.svg.select('#country-glow feDropShadow')
+    .attr('flood-color', regionColour);
+
+  globe.svg.classed('globe-dimmed', true);
+  globe.svg.selectAll('.globe-land')
+    .classed('globe-land-selected', (d) => String(d.id) === globe.selected)
+    .attr('filter', (d) => String(d.id) === globe.selected
+      ? 'url(#country-glow)' : null)
+    // Brighten the selected country's own fill so its region colour reads
+    // clearly against the dimmed background.
+    .attr('fill', (d) => {
+      const entry = globe.countriesById.get(String(d.id));
+      if (String(d.id) === globe.selected) return regionColour;
+      return entry ? (REGION_COLORS()[entry.region] || cssVar('--unknown'))
+                   : cssVar('--border');
+    });
+
+  // Raise it above its neighbours so the glow and outline aren't clipped by
+  // countries drawn later. `raise()` re-appends the node, and in SVG paint
+  // order is document order — there is no z-index.
+  globe.svg.selectAll('.globe-land')
+    .filter((d) => String(d.id) === globe.selected)
+    .raise();
+
+  const projection = globe.projection;
+  const svg = globe.svg;
+
+  // geoCentroid finds the middle of a shape ON A SPHERE — not the average of
+  // its screen coordinates, which would be wrong for anything near a pole or
+  // crossing the date line.
+  const centroid = d3.geoCentroid(feature);
+
+  // The rotation that brings that point to face us is the NEGATIVE of its
+  // coordinates: to look at longitude 100, rotate the globe by -100.
+  const targetRotation = [-centroid[0], -centroid[1], 0];
+  const startRotation = projection.rotate();
+  const startScale = projection.scale();
+
+  // Bigger countries need less zoom. geoBounds gives the shape's lon/lat
+  // extent, so we can scale inversely to its size — Russia and Malta both end
+  // up filling a sensible portion of the view.
+  const bounds = d3.geoBounds(feature);
+  const spanLon = Math.abs(bounds[1][0] - bounds[0][0]);
+  const spanLat = Math.abs(bounds[1][1] - bounds[0][1]);
+  const span = Math.max(spanLon, spanLat, 4);
+  const targetScale = globe.baseScale * Math.min(2.6, Math.max(1.25, 46 / span));
+
+  // geoInterpolate walks the GREAT CIRCLE between two points — the shortest
+  // path across a sphere, the route an aeroplane takes. Interpolating the
+  // numbers directly would slide across the map in a straight line, which
+  // looks wrong on a globe.
+  const rotInterp = d3.geoInterpolate(
+    [-startRotation[0], -startRotation[1]],
+    [centroid[0], centroid[1]]
+  );
+
+  d3.transition()
+    .duration(1100)
+    .ease(d3.easeCubicInOut)
+    .tween('fly', () => (t) => {
+      const point = rotInterp(t);
+      projection.rotate([-point[0], -point[1], 0]);
+      projection.scale(startScale + (targetScale - startScale) * t);
+      globe.render();
+    })
+    ;
+
+  showGlobeDetail(info);
+  highlightCountryRow(info.code);
+}
+
+
+function clearGlobeSelection() {
+  if (!globe.projection) return;
+  globe.selected = null;
+  show($('#globe-detail'), false);
+  globe.svg.classed('globe-dimmed', false);
+  globe.svg.selectAll('.globe-land')
+    .classed('globe-land-selected', false)
+    .attr('filter', null);
+  highlightCountryRow(null);
+
+  const projection = globe.projection;
+  const startScale = projection.scale();
+  d3.transition().duration(700).ease(d3.easeCubicInOut)
+    .tween('zoom-out', () => (t) => {
+      projection.scale(startScale + (globe.baseScale - startScale) * t);
+      globe.render();
+    })
+    .on('end', () => { globe.spinning = true; });
+}
+
+
+function showGlobeDetail(info) {
+  const colour = REGION_COLORS()[info.region] || cssVar('--unknown');
+  const el = $('#globe-detail');
+  el.style.borderLeftColor = colour;
+  el.innerHTML = `
+    <button class="close" id="globe-detail-close" aria-label="Close">×</button>
+    <h5>${esc(info.country)}</h5>
+    <span class="region-tag" style="background:${colour}">${esc(info.region)}</span>
+    <div><strong>${info.cookie_count}</strong> cookies from
+         <strong>${info.vendor_count}</strong> vendor(s)</div>
+    <div class="muted small" style="margin-top:5px">
+      ${esc(info.vendors.slice(0, 5).join(', '))}${
+        info.vendor_count > 5 ? '…' : ''}
+    </div>`;
+  show(el, true);
+  $('#globe-detail-close').onclick = clearGlobeSelection;
+}
+
+
+/* ---- The country list beside the globe --------------------------------- */
+
+function renderCountryList(countries) {
+  const list = $('#country-list');
+  if (!list) return;
+  const regionColor = REGION_COLORS();
+
+  list.innerHTML = countries.map((c) => `
+    <button class="country-row" data-code="${esc(c.code)}"
+            data-iso="${esc(c.iso_numeric || '')}">
+      <span class="country-swatch"
+            style="background:${regionColor[c.region] || cssVar('--unknown')}"></span>
+      <span class="country-name">${esc(c.country)}</span>
+      <span class="country-count">${c.cookie_count}</span>
+    </button>`).join('');
+
+  list.onclick = (event) => {
+    const row = event.target.closest('[data-code]');
+    if (!row) return;
+    const info = countries.find((c) => c.code === row.dataset.code);
+    if (!info || !info.iso_numeric || !worldAtlas) return;
+    const feature = worldAtlas.features.find(
+      (f) => String(f.id) === String(Number(info.iso_numeric))
+    );
+    if (feature) flyTo(info, feature);
+  };
+}
+
+function highlightCountryRow(code) {
+  $$('#country-list .country-row').forEach((row) => {
+    row.classList.toggle('active', row.dataset.code === code);
+  });
+}
+
+
+/* ---- Vendor-level transfer table --------------------------------------- */
+
+function renderVendorFlows() {
+  const tbody = $('#vendor-flows-tbody');
+  if (!tbody) return;
+  const vendors = state.currentReport?.data_flows?.vendors || [];
+  const regionColor = REGION_COLORS();
+
+  tbody.innerHTML = vendors.slice(0, 20).map((v) => `
+    <tr>
+      <td><strong>${esc(v.vendor)}</strong></td>
+      <td class="muted">${esc(v.country)}</td>
+      <td>
+        <span class="badge" style="background:${regionColor[v.region] || cssVar('--unknown')}">
+          ${esc(v.region)}
+        </span>
+      </td>
+      <td>${v.categories.map((c) =>
+        `<span class="pill" style="background:${CATEGORY_COLORS[c]};color:#fff">${esc(c)}</span>`
+      ).join(' ')}</td>
+      <td class="num"><strong>${v.cookie_count}</strong></td>
+    </tr>`).join('') ||
+    '<tr><td colspan="5" class="muted">No vendor data.</td></tr>';
+}
+
+
+/* ---- CHART 4: jurisdiction, horizontal bars ---------------------------- */
+
+function drawJurisdictionChart() {
+  // The flat bar chart was replaced by the globe + country list. The element
+  // no longer exists, so this returns early. Kept (rather than deleted) so the
+  // redrawCharts() call list stays stable.
+  if (!d3Available() || !document.getElementById('chart-jurisdiction')) return;
+  const svg = d3.select('#chart-jurisdiction');
+  svg.selectAll('*').remove();
+
+  const countries = (state.currentReport.data_flows?.countries || []).slice(0, 10);
+  if (!countries.length) return;
+
+  const box = svg.node().getBoundingClientRect();
+  const width = box.width;
+  const height = Math.max(160, countries.length * 30 + 40);
+  svg.attr('height', height);
+
+  const margin = { top: 6, right: 60, bottom: 24, left: 140 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+  const x = d3.scaleLinear()
+    .domain([0, d3.max(countries, (d) => d.cookie_count)])
+    .range([0, innerW]);
+
+  const y = d3.scaleBand()
+    .domain(countries.map((d) => d.country))
+    .range([0, innerH])
+    .padding(0.22);
+
+  const regionColor = REGION_COLORS();
+
+  g.selectAll('rect')
+    .data(countries)
+    .join('rect')
+      .attr('x', 0)
+      .attr('y', (d) => y(d.country))
+      .attr('height', y.bandwidth())
+      .attr('rx', 3)
+      .attr('fill', (d) => regionColor[d.region] || cssVar('--unknown'))
+      .style('cursor', 'pointer')
+      .attr('width', 0)
+      .on('mousemove', (event, d) => showTooltip(event, `
+          <strong>${esc(d.country)} — ${esc(d.region)}</strong>
+          ${d.cookie_count} cookies from ${d.vendor_count} vendor(s)<br>
+          <span style="opacity:.75">${esc(d.vendors.join(', '))}${
+            d.vendor_count > d.vendors.length ? '…' : ''}</span>`))
+      .on('mouseleave', hideTooltip)
+    .transition().duration(650).delay((d, i) => i * 40)
+      .attr('width', (d) => Math.max(2, x(d.cookie_count)));
+
+  g.selectAll('.jur-label')
+    .data(countries)
+    .join('text')
+      .attr('class', 'jur-label')
+      .attr('x', (d) => Math.max(2, x(d.cookie_count)) + 7)
+      .attr('y', (d) => y(d.country) + y.bandwidth() / 2)
+      .attr('dy', '0.35em')
+      .style('font-size', '11px')
+      .style('fill', cssVar('--text-muted'))
+      .text((d) => d.cookie_count);
+
+  g.append('g')
+    .attr('class', 'axis')
+    .call(d3.axisLeft(y).tickSize(0))
+    .select('.domain').remove();
+}
+
+
+/* ---- CHART 5: lifetime histogram --------------------------------------- */
+
+function drawLifetimeChart() {
+  if (!d3Available()) return;
+  const svg = d3.select('#chart-lifetime');
+  svg.selectAll('*').remove();
+
+  const buckets = state.currentReport.lifetime_buckets || [];
+  if (!buckets.length || buckets.every((b) => b.count === 0)) return;
+
+  const box = svg.node().getBoundingClientRect();
+  const width = box.width;
+  const height = box.height;
+  const margin = { top: 10, right: 8, bottom: 52, left: 34 };
+  const innerW = width - margin.left - margin.right;
+  const innerH = height - margin.top - margin.bottom;
+
+  const g = svg.append('g')
+    .attr('transform', `translate(${margin.left}, ${margin.top})`);
+
+  const x = d3.scaleBand()
+    .domain(buckets.map((d) => d.label))
+    .range([0, innerW])
+    .padding(0.22);
+
+  const y = d3.scaleLinear()
+    .domain([0, d3.max(buckets, (d) => d.count) || 1])
+    .nice()                       // round the top up to a tidy number
+    .range([innerH, 0]);          // inverted — SVG's y-axis points down
+
+  g.selectAll('.grid-line')
+    .data(y.ticks(4))
+    .join('line')
+      .attr('class', 'grid-line')
+      .attr('x1', 0).attr('x2', innerW)
+      .attr('y1', (d) => y(d)).attr('y2', (d) => y(d));
+
+  g.selectAll('rect')
+    .data(buckets)
+    .join('rect')
+      .attr('x', (d) => x(d.label))
+      .attr('width', x.bandwidth())
+      .attr('rx', 3)
+      // The over-13-months bucket gets the alarm colour. That one bar is the
+      // whole point of the chart.
+      .attr('fill', (d) => d.excessive ? cssVar('--marketing') : cssVar('--functional'))
+      .style('cursor', 'pointer')
+      .attr('y', innerH)          // start flat...
+      .attr('height', 0)
+      .on('mousemove', (event, d) => showTooltip(event, `
+          <strong>${esc(d.label)}</strong>
+          ${d.count} cookie(s)
+          ${d.excessive ? '<br>Exceeds CNIL\'s recommended maximum' : ''}`))
+      .on('mouseleave', hideTooltip)
+    .transition().duration(600).delay((d, i) => i * 50)
+      .attr('y', (d) => y(d.count))          // ...then grow upward
+      .attr('height', (d) => innerH - y(d.count));
+
+  g.append('g')
+    .attr('class', 'axis')
+    .attr('transform', `translate(0, ${innerH})`)
+    .call(d3.axisBottom(x))
+    .selectAll('text')
+      // Rotate the labels — "≤ 13 months" won't fit horizontally in a
+      // narrow band. `text-anchor: end` keeps the rotated text tidy.
+      .attr('transform', 'rotate(-38)')
+      .style('text-anchor', 'end')
+      .attr('dx', '-0.4em')
+      .attr('dy', '0.4em');
+
+  g.append('g')
+    .attr('class', 'axis')
+    .call(d3.axisLeft(y).ticks(4));
+}
+
+
+/* ---- CHART 6: security gauges ------------------------------------------ */
+
+function renderSecurityGauges() {
+  const sp = state.currentReport.security_posture || {};
+  const container = $('#security-gauges');
+  if (!container) return;
+
+  const gauges = [
+    {
+      id: 'g-secure', pct: sp.secure_pct ?? 0, label: 'Secure',
+      sub: `${sp.secure_count ?? 0} of ${sp.total ?? 0}`,
+      good: true,
+      tip: 'Sent only over HTTPS. Higher is better.',
+    },
+    {
+      id: 'g-httponly', pct: sp.http_only_pct ?? 0, label: 'HttpOnly',
+      sub: `${sp.http_only_count ?? 0} of ${sp.total ?? 0}`,
+      good: true,
+      tip: 'Hidden from JavaScript, which protects against XSS. Higher is better.',
+    },
+    {
+      id: 'g-crosssite',
+      pct: sp.total ? Math.round(100 * (sp.cross_site_tracker_count ?? 0) / sp.total) : 0,
+      label: 'Cross-site',
+      sub: `${sp.cross_site_tracker_count ?? 0} trackers`,
+      good: false,      // for this one, LOWER is better
+      tip: 'Third-party AND SameSite=None — built for cross-site tracking. Lower is better.',
+    },
+  ];
+
+  container.innerHTML = gauges.map((g) => `
+    <div class="gauge" title="${esc(g.tip)}">
+      <svg id="${g.id}" viewBox="0 0 120 120"></svg>
+      <div class="gauge-label">${esc(g.label)}</div>
+      <div class="gauge-sub">${esc(g.sub)}</div>
+    </div>`).join('');
+
+  gauges.forEach(drawGauge);
+}
+
+function drawGauge(cfg) {
+  if (!d3Available()) return;
+  const svg = d3.select('#' + cfg.id);
+  svg.selectAll('*').remove();
+
+  const R = 46, THICK = 11;
+  const g = svg.append('g').attr('transform', 'translate(60, 60)');
+
+  /*
+    A radial gauge is just two arcs stacked: a full grey track, and a
+    coloured arc covering `pct` of it.
+
+    Angles in D3 are RADIANS, measured clockwise from 12 o'clock.
+    A full circle is 2π. So `endAngle = 2π × (pct / 100)`.
+  */
+  const arc = d3.arc().innerRadius(R - THICK).outerRadius(R).cornerRadius(THICK / 2);
+
+  // Track.
+  g.append('path')
+    .attr('d', arc({ startAngle: 0, endAngle: 2 * Math.PI }))
+    .attr('fill', cssVar('--border'));
+
+  // For "good" metrics high is green; for the cross-site count it's reversed.
+  const value = cfg.good ? cfg.pct : 100 - cfg.pct;
+  const colour = value >= 70 ? cssVar('--necessary')
+               : value >= 40 ? cssVar('--analytics')
+               : cssVar('--marketing');
+
+  const fg = g.append('path').attr('fill', colour);
+
+  /*
+    ANIMATING AN ARC needs a TWEEN, because you can't interpolate the SVG path
+    STRING directly — halfway between two path strings is meaningless.
+
+    Instead we interpolate the ANGLE (a number), and regenerate the path on
+    every frame. `attrTween` gives D3 a function that returns the value for
+    each step of the transition.
+  */
+  const target = 2 * Math.PI * (cfg.pct / 100);
+  fg.transition().duration(750)
+    .attrTween('d', () => {
+      const interpolate = d3.interpolate(0, target);
+      return (t) => arc({ startAngle: 0, endAngle: interpolate(t) });
+    });
+
+  g.append('text')
+    .attr('text-anchor', 'middle')
+    .attr('dy', '0.35em')
+    .style('font-size', '1.35rem')
+    .style('font-weight', '700')
+    .style('fill', cssVar('--text'))
+    .text(`${Math.round(cfg.pct)}%`);
+}
+
+
+/* ---- CHART 7: treemap of third-party domains --------------------------- */
+
+function drawTreemap() {
+  if (!d3Available()) return;
+  const svg = d3.select('#chart-treemap');
+  svg.selectAll('*').remove();
+
+  const domains = (state.currentReport.third_party_domains || []).slice(0, 30);
+  show($('#treemap-empty'), domains.length === 0);
+  if (!domains.length) return;
+
+  const box = svg.node().getBoundingClientRect();
+  const width = box.width;
+  const height = 320;
+
+  /*
+    A TREEMAP fills a rectangle with sub-rectangles whose AREA is proportional
+    to a value. It's the right chart when you have many categories of wildly
+    different sizes — a bar chart of 30 domains would be unreadable, and a pie
+    chart with 30 slices is worse.
+
+    D3 needs a HIERARCHY, even for flat data, so we wrap the list in a fake
+    root node with `children`.
+  */
+  const root = d3.hierarchy({ children: domains })
+    .sum((d) => d.request_count || 1)     // sum() decides each box's area
+    .sort((a, b) => b.value - a.value);   // biggest first
+
+  d3.treemap().size([width, height]).paddingInner(2).round(true)(root);
+
+  // One <g> per leaf, positioned at its computed corner.
+  const leaf = svg.selectAll('g')
+    .data(root.leaves())
+    .join('g')
+      .attr('transform', (d) => `translate(${d.x0},${d.y0})`);
+
+  leaf.append('rect')
+    .attr('width', (d) => d.x1 - d.x0)
+    .attr('height', (d) => d.y1 - d.y0)
+    .attr('rx', 3)
+    .attr('fill', (d) => CATEGORY_COLORS[d.data.category] || cssVar('--unknown'))
+    .attr('fill-opacity', 0.88)
+    .style('cursor', 'pointer')
+    .on('mousemove', (event, d) => showTooltip(event, `
+        <strong>${esc(d.data.domain)}</strong>
+        ${d.data.request_count} request(s)<br>
+        ${esc(d.data.vendor || 'Unknown vendor')} · ${esc(d.data.category)}`))
+    .on('mouseleave', hideTooltip)
+    .style('opacity', 0)
+    .transition().duration(500).delay((d, i) => i * 18)
+    .style('opacity', 1);
+
+  /*
+    Only label boxes big enough to hold text. Cramming a label into a 12px box
+    produces overlapping mush — leaving it out and relying on the tooltip is
+    the better design.
+  */
+  leaf.append('text')
+    .attr('x', 6)
+    .attr('y', 16)
+    .style('font-size', '11px')
+    .style('font-weight', '600')
+    .style('fill', '#fff')
+    .text((d) => {
+      const w = d.x1 - d.x0, h = d.y1 - d.y0;
+      if (w < 60 || h < 24) return '';
+      // Trim "www." and truncate to roughly what fits.
+      const name = d.data.domain.replace(/^www\./, '');
+      const maxChars = Math.floor(w / 6.5);
+      return name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name;
+    });
+}
+
+
 /* ---- CHART 3: line, compliance score over time ------------------------- */
 
 function drawHistoryChart() {
@@ -978,11 +2325,8 @@ function switchView(name) {
 
   // Charts measure the SVG's rendered width. A hidden element has width 0, so
   // charts drawn while the tab was hidden come out wrong. Redraw on show.
-  if (name === 'report' && state.currentReport) {
-    drawDonutChart();
-    drawVendorChart();
-    drawHistoryChart();
-  }
+  if (name === 'report' && state.currentReport) redrawCharts();
+  if (name === 'history') { populateHistoryFilters(); loadHistory(); }
 }
 
 /*
@@ -1012,6 +2356,37 @@ function wireEvents() {
 
   $('#scan-form').onsubmit = handleScanSubmit;
   $('#refresh-domains').onclick = loadDomains;
+  $('#download-pdf').onclick = downloadReportPdf;
+
+  // ---- scan history ----
+  $('#history-refresh').onclick = loadHistory;
+  $('#history-domain-filter').onchange = (e) => {
+    historyState.domain = e.target.value;
+    historyState.page = 0;          // a new filter means a new result set
+    loadHistory();
+  };
+  $('#history-grade-filter').onchange = (e) => {
+    historyState.grade = e.target.value;
+    historyState.page = 0;
+    loadHistory();
+  };
+  $('#history-prev').onclick = () => {
+    if (historyState.page > 0) { historyState.page--; loadHistory(); }
+  };
+  $('#history-next').onclick = () => { historyState.page++; loadHistory(); };
+
+  // ---- delete confirmation ----
+  $('#delete-cancel').onclick = closeDeleteModal;
+  $('#delete-confirm').onclick = confirmDelete;
+  // Click the backdrop to dismiss — but only the backdrop itself, not a click
+  // that bubbled up from inside the dialog.
+  $('#delete-modal').onclick = (e) => {
+    if (e.target.id === 'delete-modal') closeDeleteModal();
+  };
+  // Escape closes it. Expected behaviour for any modal, and it's two lines.
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && !$('#delete-modal').hidden) closeDeleteModal();
+  });
 
   $('#cookie-search').oninput = debounce((event) => {
     state.cookieSearch = event.target.value;
@@ -1034,9 +2409,7 @@ function wireEvents() {
   */
   window.onresize = debounce(() => {
     if (state.currentReport && $('#view-report').classList.contains('view-active')) {
-      drawDonutChart();
-      drawVendorChart();
-      drawHistoryChart();
+      redrawCharts();
     }
   }, 200);
 }
@@ -1047,6 +2420,7 @@ function wireEvents() {
    ========================================================================== */
 
 async function init() {
+  initTheme();      // BEFORE anything draws, so charts pick up the right colours
   wireEvents();
 
   const healthy = await checkHealth();

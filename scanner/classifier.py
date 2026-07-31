@@ -509,6 +509,61 @@ def classify_scan(scan_result: dict, trackers: dict = None) -> dict:
     # Score it.
     result["compliance"] = calculate_compliance_score(classified_cookies)
 
+    # -----------------------------------------------------------------------
+    # POST-CONSENT DIFF
+    # -----------------------------------------------------------------------
+    # If the scanner did a second pass, classify those cookies too and compare.
+    #
+    # WHY THE DIFF IS COMPUTED HERE, not in scan.py: comparing by CATEGORY
+    # requires both sides to be classified, and classification lives in this
+    # file. scan.py's job is to observe; ours is to interpret.
+    post_raw = scan_result.get("post_consent_cookies")
+    if post_raw is not None:
+        from consent_diff import diff_consent, mark_post_consent_cookies
+
+        classified_post = [
+            {**c, **classify_cookie(c, trackers)} for c in post_raw
+        ]
+
+        result["consent_diff"] = diff_consent(
+            pre_cookies=classified_cookies,
+            post_cookies=classified_post,
+            pre_domains=scan_result.get("third_party_domains"),
+            post_domains=scan_result.get("third_party_domains"),
+        )
+
+        # Replace the cookie list with the FULL post-consent set, each entry
+        # flagged with whether it appeared before or after the click.
+        #
+        # One list with a flag, not two lists: the database schema gains a
+        # single boolean column, and "show me everything that needed consent"
+        # becomes a WHERE clause instead of a set operation in Python.
+        result["cookies"] = mark_post_consent_cookies(
+            classified_cookies, classified_post
+        )
+        result["cookie_count"] = len(result["cookies"])
+
+        # Recount categories over the full post-consent set, so the dashboard
+        # charts show the complete picture rather than only the pre-consent half.
+        counts = {c: 0 for c in CATEGORIES}
+        for c in result["cookies"]:
+            counts[c["category"]] = counts.get(c["category"], 0) + 1
+        result["categories"] = counts
+
+        # ⚠ THE SCORE STILL USES THE PRE-CONSENT COOKIES ONLY.
+        #
+        # This is deliberate and important. The compliance question is "what
+        # was set BEFORE permission", and cookies that appear after an explicit
+        # "Accept all" are consented-to and therefore lawful. Scoring the
+        # post-consent set would punish a site for honouring consent correctly
+        # — exactly backwards.
+        result["compliance"] = calculate_compliance_score(classified_cookies)
+        result["compliance"]["scored_on"] = "pre-consent cookies only"
+
+    # Drop the raw second reading — the diff and the flagged list carry
+    # everything downstream needs, and this would just bloat the JSON.
+    result.pop("post_consent_cookies", None)
+
     return result
 
 

@@ -102,6 +102,16 @@ class ScanRequest(BaseModel):
         description="Store the result in the database (set false for a dry run)",
     )
 
+    accept_consent: bool = Field(
+        default=False,
+        description=(
+            "After the first pass, click 'Accept all' and scan again, then "
+            "report the difference. This answers 'what does accepting actually "
+            "cost you?' — the most useful thing the scanner does. "
+            "Roughly doubles the scan time."
+        ),
+    )
+
     # A `field_validator` runs custom logic Pydantic can't express declaratively.
     # `mode="before"` means it runs BEFORE type conversion, so we can clean the
     # raw input first.
@@ -184,6 +194,9 @@ class CookieOut(BaseModel):
         None, description="How the classifier decided — keeps results auditable"
     )
     confidence: Optional[str] = None
+    set_after_consent: Optional[bool] = Field(
+        None, description="True if this cookie appeared only after 'Accept all'"
+    )
 
 
 class ThirdPartyDomainOut(BaseModel):
@@ -232,6 +245,16 @@ class ScanSummary(BaseModel):
     compliance_grade: Optional[str] = None
     cookies_requiring_consent: int = 0
 
+    # --- consent diff (null unless the scan did a second pass) ---
+    consent_clicked: Optional[bool] = None
+    consent_method: Optional[str] = None
+    consent_detail: Optional[str] = None
+    pre_consent_count: Optional[int] = None
+    post_consent_count: Optional[int] = None
+    cookies_added_by_consent: Optional[int] = None
+    consent_multiplier: Optional[float] = None
+    consent_verdict: Optional[str] = None
+
 
 class ScanDetail(ScanSummary):
     """
@@ -244,6 +267,60 @@ class ScanDetail(ScanSummary):
     """
     cookies: List[CookieOut] = []
     third_party_domains: List[ThirdPartyDomainOut] = []
+
+
+class ConsentClick(BaseModel):
+    """What we clicked, so the finding stays auditable."""
+    clicked: bool = False
+    method: Optional[str] = Field(
+        None, description="cmp_selector | text_match | iframe | not_found")
+    detail: Optional[str] = Field(None, description="Which CMP, or the matched text")
+    selector: Optional[str] = None
+    text: Optional[str] = Field(None, description="The button's visible label")
+    error: Optional[str] = None
+
+
+class AddedCookie(BaseModel):
+    """A cookie that appeared only after consent was given."""
+    name: str
+    domain: Optional[str] = None
+    category: Optional[str] = None
+    vendor: Optional[str] = None
+    party: Optional[str] = None
+    lifetime_days: Optional[int] = None
+
+
+class AddedVendor(BaseModel):
+    vendor: str
+    category: Optional[str] = None
+    count: int = 0
+
+
+class ConsentDiff(BaseModel):
+    """
+    What changed between the pre- and post-consent scans.
+
+    This is the headline finding: "4 cookies before consent, 61 after" says
+    far more than "38 cookies".
+    """
+    pre_consent_count: int = 0
+    post_consent_count: int = 0
+    added_count: int = 0
+    multiplier: Optional[float] = Field(
+        None, description="How many times MORE tracking accepting unlocks")
+    added_by_category: CategoryCounts = CategoryCounts()
+    added_cookies: List[AddedCookie] = []
+    vendors_added: List[AddedVendor] = []
+    domains_added: List[ThirdPartyDomainOut] = []
+
+    pre_consent_violations: int = Field(
+        0,
+        description="Non-necessary cookies present BEFORE the click — the "
+                    "actual compliance failure",
+    )
+    violation_categories: CategoryCounts = CategoryCounts()
+    verdict: str = Field("unknown", description="compliant | minor | major")
+    summary: str = ""
 
 
 class ScanCreatedResponse(BaseModel):
@@ -263,6 +340,8 @@ class ScanCreatedResponse(BaseModel):
         description="Set if navigation had a problem. Partial results may still be useful.",
     )
     saved: bool = True
+    consent_click: Optional[ConsentClick] = None
+    consent_diff: Optional[ConsentDiff] = None
 
 
 class DomainSummary(BaseModel):
@@ -311,6 +390,96 @@ class HistoryPoint(BaseModel):
     cookie_count: int = 0
 
 
+class CountryFlow(BaseModel):
+    """
+    Where one country's worth of cookies comes from.
+
+    ⚠ `iso_numeric` MUST be declared here.
+
+    A `response_model` acts as a whitelist — any field not listed is stripped
+    from the response (§47). The world map joins country data to map shapes by
+    ISO 3166-1 *numeric* id, so without this field the map would render
+    completely grey and the cause would be invisible: the API returns 200, the
+    data looks fine, and nothing matches.
+
+    A test caught exactly that (`test_data_flows_include_iso_numeric_for_the_map`),
+    which is a good illustration of why response filtering deserves a test —
+    it fails silently by design.
+    """
+    code: str = Field(description="ISO two-letter country code")
+    country: str
+    region: str = Field(description="EEA | Adequate | US (DPF) | Restricted")
+    iso_numeric: Optional[str] = Field(
+        None,
+        description="ISO 3166-1 numeric id — what the D3 world map joins on",
+    )
+    cookie_count: int = 0
+    vendors: List[str] = []
+    vendor_count: int = 0
+
+
+class RegionFlow(BaseModel):
+    region: str
+    cookie_count: int = 0
+
+
+class VendorFlow(BaseModel):
+    """
+    One vendor and where it sends data.
+
+    The globe answers "which countries"; this answers "which vendor, to
+    where" — the row you'd put in a Record of Processing Activities.
+    """
+    vendor: str
+    country: str
+    code: str
+    region: str
+    cookie_count: int = 0
+    categories: List[str] = []
+
+
+class DataFlows(BaseModel):
+    """
+    International data transfer summary.
+
+    GDPR Chapter V restricts sending personal data outside the EEA. Every
+    third-party tracker is such a transfer, so this answers a question a
+    privacy officer genuinely has to document.
+    """
+    countries: List[CountryFlow] = []
+    vendors: List[VendorFlow] = []
+    regions: List[RegionFlow] = []
+    total_cookies: int = 0
+    outside_eea: int = 0
+    outside_eea_pct: float = 0.0
+
+
+class LifetimeBucket(BaseModel):
+    """One bar of the cookie-lifetime histogram."""
+    label: str
+    count: int = 0
+    excessive: bool = Field(
+        False,
+        description="True for the bucket beyond CNIL's recommended 13-month maximum",
+    )
+
+
+class SecurityPosture(BaseModel):
+    """Cookie security flags — a security finding rather than a consent one."""
+    total: int = 0
+    secure_count: int = 0
+    secure_pct: float = 0.0
+    http_only_count: int = 0
+    http_only_pct: float = 0.0
+    samesite_none_count: int = 0
+    third_party_count: int = 0
+    cross_site_tracker_count: int = Field(
+        0,
+        description="Third-party AND SameSite=None — the clearest technical "
+                    "fingerprint of a cross-site tracker",
+    )
+
+
 class DomainReport(BaseModel):
     """The full audit report — `GET /api/report/{domain}`."""
     domain: str
@@ -325,6 +494,10 @@ class DomainReport(BaseModel):
         "insufficient data",
         description="improving | worsening | stable | insufficient data",
     )
+    data_flows: DataFlows = DataFlows()
+    lifetime_buckets: List[LifetimeBucket] = []
+    security_posture: SecurityPosture = SecurityPosture()
+    third_party_domains: List[ThirdPartyDomainOut] = []
 
 
 class HealthResponse(BaseModel):

@@ -60,11 +60,12 @@ import ipaddress
 import socket
 import sys
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Query, Path as PathParam
+from fastapi import FastAPI, HTTPException, Query, Response, Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -352,7 +353,8 @@ if _FRONTEND_DIR.is_dir():
 # RUNNING THE SCANNER FROM INSIDE THE WEB SERVER
 # ---------------------------------------------------------------------------
 
-def _run_scan_in_worker_thread(url: str, wait_seconds: int) -> dict:
+def _run_scan_in_worker_thread(url: str, wait_seconds: int,
+                               accept_consent: bool = False) -> dict:
     """
     Run a Playwright scan in its own thread, with its own event loop.
 
@@ -421,7 +423,8 @@ def _run_scan_in_worker_thread(url: str, wait_seconds: int) -> dict:
     asyncio.set_event_loop(loop)
     try:
         return loop.run_until_complete(
-            scan_website(url=url, headless=True, settle_seconds=wait_seconds)
+            scan_website(url=url, headless=True, settle_seconds=wait_seconds,
+                         accept_consent=accept_consent)
         )
     finally:
         # Always clean up: an unclosed loop leaks file descriptors, and a
@@ -550,7 +553,8 @@ async def create_scan(request: ScanRequest):
         # See `_run_scan_in_worker_thread` for why the thread is required on
         # Windows and merely good practice elsewhere.
         result = await asyncio.to_thread(
-            _run_scan_in_worker_thread, url, request.wait_seconds
+            _run_scan_in_worker_thread, url, request.wait_seconds,
+            request.accept_consent,
         )
     except Exception as e:
         raise HTTPException(
@@ -578,6 +582,8 @@ async def create_scan(request: ScanRequest):
         compliance=result.get("compliance", {}),
         error=result.get("error"),
         saved=request.save,
+        consent_click=result.get("consent_click"),
+        consent_diff=result.get("consent_diff"),
     )
 
 
@@ -740,6 +746,106 @@ def delete_scan(scan_id: int = PathParam(..., ge=1)):
 # ---------------------------------------------------------------------------
 # REPORTS
 # ---------------------------------------------------------------------------
+
+@app.get(
+    "/api/scans",
+    tags=["scans"],
+    summary="List scans across all domains",
+)
+def list_all_scans(
+    domain: str = Query(None, description="Filter to one domain"),
+    grade: str = Query(None, description="Filter by compliance grade A-F"),
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0, description="Rows to skip, for paging"),
+):
+    """
+    Scan history across the whole portfolio, newest first.
+
+    Powers the Scan History panel. Returns `{items, total}` rather than a bare
+    list, because the UI needs to know how many rows exist beyond the current
+    page in order to render "showing 20 of 137".
+
+    `offset` + `limit` is the simplest form of pagination. It's fine at this
+    scale; on very large tables it gets slow because the database still has to
+    walk past the skipped rows. The alternative, keyset pagination ("give me
+    rows after this timestamp"), stays fast but can't jump to an arbitrary
+    page. Worth knowing the trade-off exists.
+    """
+    if grade:
+        grade = grade.upper()
+        if grade not in {"A", "B", "C", "D", "F"}:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid grade '{grade}'. Valid: A, B, C, D, F",
+            )
+    return db.list_scans(domain=domain, grade=grade, limit=limit, offset=offset)
+
+
+@app.get(
+    "/api/report/{domain}/pdf",
+    tags=["reports"],
+    summary="Download the audit report as a PDF",
+    responses={
+        200: {"content": {"application/pdf": {}},
+              "description": "The audit report as a PDF file"},
+        404: {"model": ErrorResponse, "description": "Domain not found"},
+    },
+)
+async def domain_report_pdf(domain: str = PathParam(..., description="e.g. bbc.com")):
+    """
+    Generate a downloadable PDF of the audit report.
+
+    HOW IT WORKS
+    ------------
+    We build a self-contained HTML document in Python — all data inlined, no
+    JavaScript, no external requests — then let Chromium's own print engine
+    turn it into a PDF. Playwright was already a dependency for scanning, so
+    the capability came free.
+
+    That's worth noticing: a tool bought for one job solved a different one,
+    because browser automation is a general capability rather than a
+    task-specific library.
+
+    Why not point Playwright at the live dashboard? It fetches its data with
+    JavaScript, so the server would be calling itself over HTTP, and the D3
+    charts need a CDN. An export that breaks when you're offline is a bad
+    export.
+    """
+    report = db.get_domain_report(domain)
+    if not report:
+        raise HTTPException(status_code=404, detail=f"No data for domain '{domain}'.")
+
+    from report_pdf import build_report_html, render_pdf_sync
+
+    html_text = build_report_html(report)
+
+    try:
+        # Worker thread for the same reason as the scanner — see
+        # `_run_scan_in_worker_thread` and TEACHING.md §54.
+        pdf_bytes = await asyncio.to_thread(render_pdf_sync, html_text)
+    except Exception as e:
+        raise HTTPException(
+            status_code=503,
+            detail=(f"PDF generation failed: {type(e).__name__}: {e}. "
+                    "Is Chromium installed? Run: playwright install chromium"),
+        )
+
+    # A safe filename: strip anything that isn't alphanumeric, dot, dash or
+    # underscore. A domain can't normally contain path separators, but building
+    # a filename from user input without sanitising is a habit worth not having.
+    safe = "".join(c for c in domain if c.isalnum() or c in "._-") or "report"
+    filename = f"cookieguard-{safe}-{datetime.now(timezone.utc):%Y%m%d}.pdf"
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            # `attachment` makes the browser DOWNLOAD the file rather than
+            # display it inline. `inline` would open it in the PDF viewer.
+            "Content-Disposition": f'attachment; filename="{filename}"',
+        },
+    )
+
 
 @app.get(
     "/api/report/{domain}",

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<!--
+  CookieGuard — Consent banner demo (Phase 5)
+  ===========================================
+
+  A pretend website that uses the consent banner, so you can SEE the blocking
+  work rather than take it on faith.
+
+  Open http://127.0.0.1:8000/dashboard/demo.html and:
+
+    1. Note the "blocked" scripts below have NOT run
+    2. Click "Accept all"        → watch them activate
+    3. Click 🍪 → Reject all     → watch the cookies get deleted
+    4. Reload the page           → your choice is remembered
+
+  THIS IS YOUR INTERVIEW DEMO. It takes thirty seconds and shows the whole
+  compliance argument: nothing fires before consent, rejecting is one click,
+  and withdrawal is always available.
+-->
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CookieGuard — Consent Banner Demo</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      max-width: 820px; margin: 0 auto; padding: 40px 24px 120px;
+      line-height: 1.6; color: #0f172a; background: #f8fafc;
+    }
+    h1 { margin-bottom: 4px; }
+    .sub { color: #64748b; margin-top: 0; }
+    .box {
+      background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+      padding: 18px 20px; margin: 18px 0;
+    }
+    .status {
+      font-family: ui-monospace, Consolas, monospace; font-size: 13px;
+      padding: 10px 14px; border-radius: 8px; margin: 6px 0;
+    }
+    .blocked { background: #fee2e2; color: #991b1b; }
+    .active  { background: #d1fae5; color: #065f46; }
+    code {
+      background: #f1f5f9; padding: 2px 6px; border-radius: 4px;
+      font-size: .88em;
+    }
+    pre {
+      background: #0f172a; color: #e2e8f0; padding: 14px 16px;
+      border-radius: 8px; overflow-x: auto; font-size: 13px;
+    }
+    button {
+      padding: 9px 16px; border-radius: 8px; border: 1px solid #cbd5e1;
+      background: #fff; cursor: pointer; font-family: inherit; font-size: 14px;
+    }
+    button:hover { background: #f1f5f9; }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    td, th { padding: 7px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    @media (prefers-color-scheme: dark) {
+      body { background: #0b1120; color: #e6edf7; }
+      .box { background: #151e33; border-color: #263349; }
+      code { background: #1e293b; color: #cbd5e1; }
+      td, th { border-color: #263349; }
+      button { background: #1e293b; color: #e6edf7; border-color: #334155; }
+    }
+  </style>
+</head>
+<body>
+
+<h1>🍪 Consent Banner Demo</h1>
+<p class="sub">
+  A pretend website that loads three trackers — but only after you allow them.
+</p>
+
+<div class="box">
+  <h2>Live tracker status</h2>
+  <p>
+    These update in real time. Reload with different choices and watch them
+    change.
+  </p>
+  <div id="status-analytics" class="status blocked">⛔ Analytics — blocked</div>
+  <div id="status-marketing" class="status blocked">⛔ Marketing — blocked</div>
+  <div id="status-functional" class="status blocked">⛔ Functional — blocked</div>
+</div>
+
+<div class="box">
+  <h2>Your stored consent record</h2>
+  <p class="sub">
+    Exactly what a regulator would ask you to produce, including the timestamp.
+  </p>
+  <pre id="record">(no decision yet)</pre>
+  <button onclick="CookieGuardConsent.show(true)">Change preferences</button>
+  <button onclick="CookieGuardConsent.reset()">Reset and ask again</button>
+</div>
+
+<div class="box">
+  <h2>Cookies currently on this page</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Value (truncated)</th></tr></thead>
+    <tbody id="cookie-list"></tbody>
+  </table>
+</div>
+
+<div class="box">
+  <h2>How a site owner uses this</h2>
+  <p>One script tag, then mark each tracker with its category:</p>
+  <pre>&lt;script src="consent-banner.js"
+        data-policy-url="/privacy"&gt;&lt;/script&gt;
+
+&lt;!-- BLOCKED until consent. type="text/plain" makes the
+     browser ignore the tag entirely --&gt;
+&lt;script type="text/plain" data-cookieguard="analytics"
+        src="https://www.googletagmanager.com/gtag/js?id=G-XXXX"&gt;&lt;/script&gt;
+
+&lt;script type="text/plain" data-cookieguard="marketing"&gt;
+  // Facebook Pixel, etc.
+&lt;/script&gt;</pre>
+  <p>
+    The banner swaps each allowed tag for a real one once permission is given.
+    Everything else stays inert.
+  </p>
+</div>
+
+<!-- ======================================================================
+     THE BLOCKED SCRIPTS
+     ======================================================================
+     Each of these is a stand-in for a real tracker. They set a cookie and
+     update the status line — but ONLY if the browser executes them.
+
+     `type="text/plain"` is what stops that. The browser does not recognise it
+     as JavaScript, so the tag is treated as inert text: not downloaded, not
+     parsed, not run.
+     ====================================================================== -->
+
+<script type="text/plain" data-cookieguard="analytics">
+  // Pretending to be Google Analytics.
+  document.cookie = "_ga=GA1.2.demo" + Date.now() + "; path=/; max-age=63072000";
+  document.cookie = "_gid=GA1.2.demo; path=/; max-age=86400";
+  document.getElementById('status-analytics').className = 'status active';
+  document.getElementById('status-analytics').textContent =
+    '✅ Analytics — RUNNING (set _ga, _gid)';
+  console.log('[demo] analytics tracker executed');
+</script>
+
+<script type="text/plain" data-cookieguard="marketing">
+  // Pretending to be the Facebook Pixel.
+  document.cookie = "_fbp=fb.1.demo" + Date.now() + "; path=/; max-age=7776000";
+  document.getElementById('status-marketing').className = 'status active';
+  document.getElementById('status-marketing').textContent =
+    '✅ Marketing — RUNNING (set _fbp)';
+  console.log('[demo] marketing pixel executed');
+</script>
+
+<script type="text/plain" data-cookieguard="functional">
+  document.cookie = "language=en; path=/; max-age=31536000";
+  document.getElementById('status-functional').className = 'status active';
+  document.getElementById('status-functional').textContent =
+    '✅ Functional — RUNNING (set language)';
+  console.log('[demo] functional script executed');
+</script>
+
+<!-- The banner itself. -->
+<script src="consent-banner.js" data-policy-url="#" data-position="bottom"></script>
+
+<script>
+  // Small helper to keep the demo's own displays current.
+  function refreshDemo() {
+    const record = window.CookieGuardConsent
+      ? CookieGuardConsent.getRecord() : null;
+    document.getElementById('record').textContent =
+      record ? JSON.stringify(record, null, 2) : '(no decision yet)';
+
+    const rows = document.cookie.split('; ').filter(Boolean).map((row) => {
+      const i = row.indexOf('=');
+      const name = row.slice(0, i);
+      const value = row.slice(i + 1);
+      return `<tr><td><code>${name}</code></td><td>${
+        value.length > 46 ? value.slice(0, 46) + '…' : value}</td></tr>`;
+    });
+    document.getElementById('cookie-list').innerHTML =
+      rows.join('') || '<tr><td colspan="2">No cookies set.</td></tr>';
+  }
+
+  // The banner fires this event whenever a decision is applied.
+  window.addEventListener('cookieguard:consent', refreshDemo);
+  setInterval(refreshDemo, 800);
+  refreshDemo();
+</script>
+
+</body>
+</html>

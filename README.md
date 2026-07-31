@@ -108,18 +108,21 @@ month. It is slow, error-prone, and impossible to prove afterwards.
 1. **Scanner** — loads a website in a real headless browser and captures all
    cookies (first-party *and* third-party) plus every network request, so
    tracking pixels that set no cookie are still detected.
-2. **Classifier** — categorises each cookie as **Necessary / Analytics /
+2. **Pre/post-consent diff** — optionally clicks "Accept all" and scans again,
+   reporting exactly what accepting unlocks. This is the finding that matters:
+   *"4 cookies before consent, 61 after"* says far more than *"38 cookies"*.
+3. **Classifier** — categorises each cookie as **Necessary / Analytics /
    Marketing / Functional**, matched against a tracker-signature database
    (`trackers.json`).
-3. **Multi-domain support** — scan and store results for many websites, each
+4. **Multi-domain support** — scan and store results for many websites, each
    with full scan history.
-4. **REST API** — endpoints to trigger scans, fetch results, and generate reports.
-5. **Dashboard** — responsive vanilla HTML/CSS/JS UI showing the domain list, a
+5. **REST API** — endpoints to trigger scans, fetch results, and generate reports.
+6. **Dashboard** — responsive vanilla HTML/CSS/JS UI showing the domain list, a
    cookie inventory table (name, domain, category, expiry, first/third-party)
    and category-wise charts.
-6. **Consent banner** — Accept All / Reject All / Customise, storing the user's
+7. **Consent banner** — Accept All / Reject All / Customise, storing the user's
    preference and blocking non-necessary cookies until consent is given.
-7. **Audit report** — per-domain compliance summary with scan history and a
+8. **Audit report** — per-domain compliance summary with scan history and a
    compliance score.
 
 ### Planned (post-MVP)
@@ -177,12 +180,14 @@ CookieGuard/
 │   ├── scan.py              # Playwright — opens a browser, captures cookies + network requests
 │   ├── classifier.py        # Categorises each cookie + computes a compliance score
 │   ├── domains.py           # Public Suffix List — "what is the core domain of this host?"
+│   ├── jurisdictions.py     # vendor → country → GDPR transfer region
 │   └── trackers.json        # Signature database: 276 known trackers (_ga → Analytics, etc.)
 │
 ├── tests/
 │   ├── test_classifier.py   # 33 tests for the classification logic
 │   ├── test_db.py           # 36 tests for the database layer
-│   └── test_api.py          # 45 tests for the REST API
+│   ├── test_api.py          # 47 tests for the REST API
+│   └── test_consent_banner.py # 34 tests for the consent banner
 │
 ├── api/
 │   ├── db.py                # SQLite: schema, transactional writes, all queries
@@ -320,6 +325,22 @@ python scanner/scan.py https://example.com --output data/example.json
 
 # Wait longer for slow, tracker-heavy sites
 python scanner/scan.py https://example.com --wait 8
+
+# THE BEST ONE: scan, click "Accept all", scan again, report the difference
+python scanner/scan.py https://www.bbc.com --accept-consent
+```
+
+The `--accept-consent` pass answers the question people actually have:
+
+```
+  CONSENT BANNER
+  ----------------------------------------------------------
+  Clicked: "Accept All Cookies"
+  Found via: cmp_selector (OneTrust)
+
+  BEFORE consent: 4 cookies
+  AFTER consent:  61 cookies   (+57)
+  Accepting multiplied tracking by 15.3x
 ```
 
 Sample output:
@@ -485,6 +506,30 @@ Point the API at a different database with an environment variable:
 COOKIEGUARD_DB=/path/to/other.db uvicorn api.main:app
 ```
 
+### Try the consent banner (Phase 5 — available now)
+
+**http://127.0.0.1:8000/dashboard/demo.html**
+
+A pretend website with three blocked trackers. Watch them stay inert until you
+consent, then activate — and watch the cookies get deleted when you withdraw.
+
+**This is the 30-second demo.** It shows the whole compliance argument: nothing
+fires before consent, rejecting takes one click, and withdrawal is always
+available.
+
+To use the banner on a real site, one script tag plus a marker on each tracker:
+
+```html
+<script src="consent-banner.js" data-policy-url="/privacy"></script>
+
+<!-- BLOCKED until consent. type="text/plain" makes the browser
+     ignore the tag entirely — it isn't even downloaded. -->
+<script type="text/plain" data-cookieguard="analytics"
+        src="https://www.googletagmanager.com/gtag/js?id=G-XXXX"></script>
+```
+
+No framework, no build step, no dependencies. The banner injects its own styles.
+
 ### Open the dashboard (Phase 4 — available now)
 
 With the API running, open:
@@ -500,7 +545,24 @@ The dashboard has three tabs:
 |-----|---------------|
 | **Domains** | Every scanned site, with average score. Includes a form to run a new scan. |
 | **Cookie Inventory** | Full cookie table for a chosen scan, filterable by category and searchable. |
-| **Audit Report** | Score, trend, and three D3 charts: category donut, top vendors, score history. |
+| **Audit Report** | Score, trend, seven interactive D3 charts, and a **Download PDF** button. |
+| **Scan History** | Every scan across all domains, filterable by domain and grade, with paging and a delete confirmation flow. |
+
+There's a 🌙 / ☀️ toggle in the header for dark mode. It remembers your choice
+and defaults to your operating system's setting.
+
+#### Audit report metrics
+
+| Metric | Why it matters |
+|--------|----------------|
+| **Category donut** | The consent split at a glance |
+| **Top vendors** | Which companies appear most across all scans |
+| **World map** | D3 choropleth — every country coloured by GDPR transfer region. Hover for vendors. |
+| **Where does the data go?** | GDPR Chapter V — how many cookies come from vendors outside the EEA. On CNN this reads **89.8%**. |
+| **Cookie lifetimes** | Histogram bucketed around CNIL's recommended 13-month maximum |
+| **Cookie security** | Secure / HttpOnly / cross-site tracker percentages |
+| **Third-party treemap** | Every external domain contacted, sized by request count |
+| **Score over time** | Trend line — is this site improving? |
 
 You can also open `frontend/index.html` directly from disk — it detects
 `file://` and points at `http://127.0.0.1:8000` — but the served version is
@@ -528,6 +590,8 @@ Base URL: `http://127.0.0.1:8000`
 | `GET` | `/api/scans/{scan_id}/cookies` | Cookie inventory. `?category=` filter |
 | `DELETE` | `/api/scans/{scan_id}` | Delete a scan. `204 No Content`. |
 | `GET` | `/api/report/{domain}` | Compliance summary, vendors, history, trend |
+| `GET` | `/api/report/{domain}/pdf` | **Download the audit report as a PDF** |
+| `GET` | `/api/scans` | Scan history across all domains. `?domain=` `?grade=` `?limit=` `?offset=` |
 
 ### Security note
 
@@ -598,8 +662,8 @@ Once the API exists, FastAPI will auto-generate live, testable documentation at
 | **2b** | SQLite database + Public Suffix List fix | ✅ **Done** |
 | **3** | FastAPI REST endpoints | ✅ **Done** |
 | **4** | Dashboard (tables + charts + audit report) | ✅ **Done** |
-| **5** | Consent banner | ⬜ Next |
-| **6** | Docker + GitHub Actions CI/CD | ⬜ Pending |
+| **5** | Consent banner | ✅ **Done** |
+| **6** | Docker + GitHub Actions CI/CD | ⬜ Next |
 | **7** | AWS deployment | ⬜ Pending |
 
 ---

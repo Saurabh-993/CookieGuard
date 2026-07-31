@@ -63,6 +63,20 @@
     and can run before the elements it needs exist.
   -->
   <script src="https://cdn.jsdelivr.net/npm/d3@7" defer></script>
+
+  <!--
+    TopoJSON — a compact format for geographic shapes.
+
+    Plain GeoJSON stores every country's outline independently, so a shared
+    border between France and Germany is stored TWICE. TopoJSON stores each
+    border segment once and describes countries as combinations of them
+    ("topology"), which makes the world roughly 80% smaller.
+
+    `topojson-client` converts it back to GeoJSON so D3 can draw it.
+    See docs/TEACHING.md §73.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/topojson-client@3" defer></script>
+
   <script src="app.js" defer></script>
 </head>
 
@@ -84,10 +98,21 @@
       </div>
     </div>
 
-    <!-- Live connection status, updated by app.js from GET /health -->
-    <div class="api-status" id="api-status">
-      <span class="dot dot-pending"></span>
-      <span id="api-status-text">Connecting…</span>
+    <div class="header-actions">
+      <!-- Live connection status, updated by app.js from GET /health -->
+      <div class="api-status" id="api-status">
+        <span class="dot dot-pending"></span>
+        <span id="api-status-text">Connecting…</span>
+      </div>
+
+      <!--
+        Theme toggle.
+        `aria-label` is what a screen reader announces — the emoji alone means
+        nothing to it. `title` gives sighted users a hover tooltip.
+      -->
+      <button class="theme-toggle" id="theme-toggle"
+              aria-label="Switch between light and dark theme"
+              title="Toggle dark mode">🌙</button>
     </div>
   </div>
 </header>
@@ -110,6 +135,9 @@
   </button>
   <button class="tab" data-view="report"    role="tab" aria-selected="false">
     Audit Report
+  </button>
+  <button class="tab" data-view="history"   role="tab" aria-selected="false">
+    Scan History
   </button>
 </nav>
 
@@ -158,6 +186,10 @@
           <option value="10">10s wait</option>
           <option value="15">15s wait</option>
         </select>
+        <label class="checkbox-inline" title="Roughly doubles the scan time">
+          <input type="checkbox" id="scan-accept-consent">
+          <span>Also click "Accept all" and compare</span>
+        </label>
         <button type="submit" class="btn btn-primary" id="scan-btn">
           <span id="scan-btn-text">Scan</span>
           <!-- The spinner is always in the DOM; CSS hides it until scanning. -->
@@ -262,7 +294,17 @@
     <div class="card">
       <div class="card-head">
         <h2>Audit report</h2>
-        <select id="report-domain-select" class="input"></select>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <select id="report-domain-select" class="input"></select>
+          <!--
+            Downloads a PDF generated server-side by Playwright — the same
+            browser engine used for scanning, reused for printing.
+          -->
+          <button class="btn btn-primary" id="download-pdf">
+            <span id="pdf-btn-text">⬇ Download PDF</span>
+            <span class="spinner" id="pdf-spinner" hidden></span>
+          </button>
+        </div>
       </div>
 
       <!-- Score summary -->
@@ -297,6 +339,135 @@
       </div>
     </div>
 
+    <!-- ---- What does accepting cost you? ---- -->
+    <div class="card" id="consent-diff-card" hidden>
+      <h3>What does accepting cost you?</h3>
+      <p class="muted small">
+        The scanner clicked "Accept all" and scanned again. This is the
+        difference — the question a visitor actually has.
+      </p>
+      <div id="consent-diff-body"></div>
+    </div>
+
+    <!-- ---- Where does the data go? ---- -->
+    <div class="card">
+      <h3>Where does the data go?</h3>
+      <p class="muted small">
+        GDPR Chapter V restricts sending personal data outside the EEA. Every
+        third-party tracker is such a transfer. Country is inferred from the
+        vendor's headquarters — an indicator for review, not a legal finding.
+      </p>
+
+      <div class="flow-headline" id="flow-headline"></div>
+
+      <!--
+        THE GLOBE.
+        Orthographic projection — a real sphere, not a flattened rectangle.
+        Auto-rotates, drag to spin, click a country to fly to it.
+        See docs/TEACHING.md §73 for the projection maths and quaternions.
+      -->
+      <div class="globe-layout">
+        <div class="globe-stage">
+          <svg id="globe" class="globe"></svg>
+
+          <!-- Overlay shown when a country is selected -->
+          <div class="globe-detail" id="globe-detail" hidden></div>
+
+          <div class="globe-hint" id="globe-hint">
+            Drag to spin · click a country to zoom
+          </div>
+        </div>
+
+        <!--
+          A clickable country list beside the globe.
+          A globe alone is not DISCOVERABLE — you cannot find Serbia by
+          spinning hopefully. The list gives every country a direct route,
+          and the globe gives the spatial intuition. Each covers the other's
+          weakness.
+        -->
+        <div class="globe-side">
+          <h4 class="globe-side-title">Countries receiving data</h4>
+          <div class="country-list" id="country-list"></div>
+        </div>
+      </div>
+
+      <p class="empty-state small" id="globe-fallback" hidden>
+        Map data could not be loaded (it comes from a CDN). The table below
+        shows the same information.
+      </p>
+
+      <div class="region-legend">
+        <span class="region-eea">■ EEA — no transfer restrictions</span>
+        <span class="region-adequate">■ Adequacy decision — permitted</span>
+        <span class="region-dpf">■ US (Data Privacy Framework) — under legal challenge</span>
+        <span class="region-restricted">■ Restricted — needs SCCs + impact assessment</span>
+      </div>
+    </div>
+
+    <!-- ---- Vendor-level transfer table ---- -->
+    <div class="card">
+      <h3>Data transfer analysis</h3>
+      <p class="muted small">
+        Which vendor sends data where. This is the row you would put in a
+        Record of Processing Activities.
+      </p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Vendor</th>
+              <th>Inferred headquarters</th>
+              <th>Region</th>
+              <th>Categories</th>
+              <th class="num">Cookies</th>
+            </tr>
+          </thead>
+          <tbody id="vendor-flows-tbody"></tbody>
+        </table>
+      </div>
+      <div class="alert alert-info small" style="margin-top:14px">
+        <strong>Inferred headquarters are an indicator for review, not legal
+        advice.</strong> Actual transfer locations depend on contracts,
+        sub-processors and data-centre configuration. Confirm with each
+        vendor's documentation before relying on this section.
+      </div>
+    </div>
+
+    <div class="chart-grid">
+      <!-- ---- Cookie lifetimes ---- -->
+      <div class="card chart-card">
+        <h3>How long do cookies live?</h3>
+        <p class="muted small">
+          France's CNIL recommends a <strong>13-month maximum</strong>.
+          Anything beyond that is flagged.
+        </p>
+        <svg id="chart-lifetime" class="chart"></svg>
+      </div>
+
+      <!-- ---- Security posture ---- -->
+      <div class="card chart-card">
+        <h3>Cookie security</h3>
+        <p class="muted small">
+          A security finding rather than a consent one — but it belongs in the
+          same audit.
+        </p>
+        <div class="gauge-row" id="security-gauges"></div>
+      </div>
+    </div>
+
+    <!-- ---- Third-party network ---- -->
+    <div class="card">
+      <h3>Third-party domains contacted</h3>
+      <p class="muted small">
+        Box size = number of requests. Colour = category. These fire even when
+        no cookie is set — that's how tracking pixels work.
+      </p>
+      <svg id="chart-treemap" class="treemap"></svg>
+      <p class="empty-state" id="treemap-empty" hidden>
+        This site contacted no external domains.
+      </p>
+    </div>
+
     <div class="card">
       <h3>Compliance score over time</h3>
       <p class="muted small">
@@ -329,7 +500,91 @@
     </div>
   </section>
 
+  <!-- ================================================================== -->
+  <!-- VIEW 4: SCAN HISTORY                                                -->
+  <!-- ================================================================== -->
+  <section class="view" id="view-history">
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Scan history</h2>
+        <span class="muted small" id="history-count"></span>
+      </div>
+      <p class="muted small">
+        Every scan across every domain, newest first. Deleting a scan also
+        removes its cookies — the database handles that automatically.
+      </p>
+
+      <div class="filter-bar">
+        <select id="history-domain-filter" class="input">
+          <option value="">All domains</option>
+        </select>
+        <select id="history-grade-filter" class="input input-narrow">
+          <option value="">All grades</option>
+          <option value="A">Grade A</option>
+          <option value="B">Grade B</option>
+          <option value="C">Grade C</option>
+          <option value="D">Grade D</option>
+          <option value="F">Grade F</option>
+        </select>
+        <button class="btn btn-ghost" id="history-refresh">Refresh</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Scanned</th>
+              <th>Domain</th>
+              <th class="num">Cookies</th>
+              <th>Score</th>
+              <th class="num">Needs consent</th>
+              <th>Breakdown</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="history-tbody"></tbody>
+        </table>
+      </div>
+
+      <p class="empty-state" id="history-empty-state" hidden>
+        No scans match these filters.
+      </p>
+
+      <div class="pager" id="history-pager" hidden>
+        <button class="btn btn-ghost" id="history-prev">← Previous</button>
+        <span class="muted small" id="history-page-label"></span>
+        <button class="btn btn-ghost" id="history-next">Next →</button>
+      </div>
+    </div>
+  </section>
+
 </main>
+
+<!-- ====================================================================== -->
+<!-- DELETE CONFIRMATION MODAL                                              -->
+<!-- ======================================================================
+     Deletion is IRREVERSIBLE and CASCADES to every cookie row. A single
+     mis-click should not be able to destroy audit history, so we interrupt
+     with a dialog that states exactly what will be lost.
+
+     This is the standard pattern for a destructive action: confirm, name the
+     specific thing, and make the dangerous button the one you have to aim at.
+-->
+<div class="modal-overlay" id="delete-modal" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="delete-title">
+    <h3 id="delete-title">Delete this scan?</h3>
+    <p class="muted" id="delete-detail"></p>
+    <div class="alert alert-error small" style="margin:14px 0">
+      This cannot be undone. The scan and all of its cookie records will be
+      permanently removed from the audit history.
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" id="delete-cancel">Cancel</button>
+      <button class="btn btn-danger" id="delete-confirm">Delete scan</button>
+    </div>
+  </div>
+</div>
 
 <!-- Tooltip element, moved and filled by the D3 charts on hover. -->
 <div class="tooltip" id="tooltip" hidden></div>

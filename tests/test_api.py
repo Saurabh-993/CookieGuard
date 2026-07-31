@@ -172,6 +172,17 @@ def test_root_advertises_the_dashboard(client):
     assert client.get("/").json()["dashboard"] == "/dashboard/"
 
 
+def test_consent_banner_and_demo_are_served(client):
+    """Phase 5 files must be reachable so the demo works from the browser."""
+    r = client.get("/dashboard/consent-banner.js")
+    assert r.status_code == 200
+    assert "CookieGuardConsent" in r.text
+
+    r = client.get("/dashboard/demo.html")
+    assert r.status_code == 200
+    assert 'type="text/plain"' in r.text
+
+
 # ---------------------------------------------------------------------------
 # 2. SSRF PROTECTION — the security tests
 # ---------------------------------------------------------------------------
@@ -390,6 +401,123 @@ def test_report_for_unknown_domain_is_404(client):
     assert client.get("/api/report/nope.com").status_code == 404
 
 
+def test_report_includes_insight_metrics(client):
+    """The four metrics added after the Phase 4 review."""
+    db.save_scan(make_scan())
+    body = client.get("/api/report/example.com").json()
+
+    assert "data_flows" in body
+    assert "lifetime_buckets" in body
+    assert "security_posture" in body
+    assert "third_party_domains" in body
+
+    # Meta is a US vendor, so it must show as an outside-EEA transfer.
+    flows = body["data_flows"]
+    assert flows["outside_eea"] >= 1
+    assert any(c["country"] == "United States" for c in flows["countries"])
+
+
+def test_data_flows_include_iso_numeric_for_the_map(client):
+    """
+    The world map joins on ISO 3166-1 NUMERIC id, not name. Without this
+    field every country would silently fail to match and the map would render
+    completely grey.
+    """
+    db.save_scan(make_scan())
+    flows = client.get("/api/report/example.com").json()["data_flows"]
+    us = next(c for c in flows["countries"] if c["code"] == "US")
+    assert us["iso_numeric"] == "840"
+
+
+def test_pdf_endpoint_404s_for_unknown_domain(client):
+    """
+    We don't test successful PDF generation here — it needs a real Chromium,
+    which would make the suite slow and environment-dependent. The HTML
+    builder is tested separately in test_report_pdf.py; this checks the
+    endpoint's error path.
+    """
+    assert client.get("/api/report/nope.com/pdf").status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# 5b. SCAN HISTORY LISTING
+# ---------------------------------------------------------------------------
+
+def test_list_scans_returns_items_and_total(client):
+    """
+    `{items, total}` rather than a bare list, because the UI needs to know how
+    many rows exist beyond the page it's showing.
+    """
+    db.save_scan(make_scan(domain="a.com"))
+    db.save_scan(make_scan(domain="b.com"))
+    body = client.get("/api/scans").json()
+    assert body["total"] == 2
+    assert len(body["items"]) == 2
+    # Each row carries its domain, so the table needs no second lookup.
+    assert all("domain" in item for item in body["items"])
+
+
+def test_list_scans_newest_first(client):
+    for day in ("01", "05", "03"):
+        db.save_scan(make_scan(scanned_at=f"2026-07-{day}T10:00:00+00:00"))
+    items = client.get("/api/scans").json()["items"]
+    dates = [i["scanned_at"][:10] for i in items]
+    assert dates == sorted(dates, reverse=True)
+
+
+def test_list_scans_filters_by_domain(client):
+    db.save_scan(make_scan(domain="keep.com"))
+    db.save_scan(make_scan(domain="other.com"))
+    body = client.get("/api/scans?domain=keep.com").json()
+    assert body["total"] == 1
+    assert body["items"][0]["domain"] == "keep.com"
+
+
+def test_list_scans_filters_by_grade(client):
+    db.save_scan(make_scan(domain="good.com", score=95, grade="A"))
+    db.save_scan(make_scan(domain="bad.com", score=10, grade="F"))
+    body = client.get("/api/scans?grade=F").json()
+    assert body["total"] == 1
+    assert body["items"][0]["domain"] == "bad.com"
+
+
+def test_list_scans_grade_filter_is_case_insensitive(client):
+    db.save_scan(make_scan(grade="A", score=95))
+    assert client.get("/api/scans?grade=a").json()["total"] == 1
+
+
+def test_list_scans_rejects_invalid_grade(client):
+    assert client.get("/api/scans?grade=Z").status_code == 400
+
+
+def test_list_scans_pagination(client):
+    for i in range(5):
+        db.save_scan(make_scan(scanned_at=f"2026-07-0{i+1}T10:00:00+00:00"))
+
+    page1 = client.get("/api/scans?limit=2&offset=0").json()
+    page2 = client.get("/api/scans?limit=2&offset=2").json()
+
+    assert page1["total"] == 5 and page2["total"] == 5   # total ignores paging
+    assert len(page1["items"]) == 2
+    # Different pages must not overlap.
+    ids1 = {i["id"] for i in page1["items"]}
+    ids2 = {i["id"] for i in page2["items"]}
+    assert not (ids1 & ids2)
+
+
+def test_list_scans_sql_injection_in_filter_is_harmless(client):
+    """
+    The WHERE clause is built conditionally, which is exactly where people
+    reach for f-strings. The condition FRAGMENTS are our text; only the values
+    are bound.
+    """
+    db.save_scan(make_scan())
+    evil = "x'; DROP TABLE scans; --"
+    body = client.get(f"/api/scans?domain={evil}").json()
+    assert body["total"] == 0                      # no match, no crash
+    assert client.get("/api/scans").json()["total"] == 1   # table survives
+
+
 # ---------------------------------------------------------------------------
 # 6. DELETE
 # ---------------------------------------------------------------------------
@@ -426,7 +554,8 @@ def test_delete_missing_scan_is_404(client):
 @pytest.fixture
 def mock_scanner(monkeypatch):
     """Replace scan.scan_website with an instant fake."""
-    async def fake_scan_website(url, headless=True, settle_seconds=5):
+    async def fake_scan_website(url, headless=True, settle_seconds=5,
+                                accept_consent=False):
         return {
             "url": url, "final_url": url, "domain": "example.com",
             "page_title": "Fake", "http_status": 200,
@@ -442,6 +571,24 @@ def mock_scanner(monkeypatch):
             "third_party_cookies": 0, "session_cookies": 0,
             "persistent_cookies": 1, "total_requests": 5,
             "third_party_domains": [], "requests": [],
+            # Present only when accept_consent=True — mirrors the real scanner.
+            "consent_click": {"clicked": True, "method": "cmp_selector",
+                              "detail": "OneTrust", "text": "Accept All"}
+                             if accept_consent else None,
+            "post_consent_cookies": ([
+                {"name": "_ga", "domain": ".example.com", "path": "/",
+                 "party": "first", "type": "persistent", "expires_at": None,
+                 "lifetime_days": 730, "http_only": False, "secure": True,
+                 "same_site": "Lax", "value_length": 27},
+                {"name": "_fbp", "domain": ".example.com", "path": "/",
+                 "party": "first", "type": "persistent", "expires_at": None,
+                 "lifetime_days": 90, "http_only": False, "secure": True,
+                 "same_site": "Lax", "value_length": 22},
+                {"name": "IDE", "domain": ".doubleclick.net", "path": "/",
+                 "party": "third", "type": "persistent", "expires_at": None,
+                 "lifetime_days": 390, "http_only": False, "secure": True,
+                 "same_site": "None", "value_length": 30},
+            ] if accept_consent else None),
         }
 
     import scan
@@ -484,7 +631,7 @@ def test_scan_dry_run_does_not_persist(client, mock_scanner):
 
 def test_scan_failure_returns_504(client, monkeypatch):
     """A crash inside the scanner must become a clean HTTP error, not a 500."""
-    async def boom(url, headless=True, settle_seconds=5):
+    async def boom(url, headless=True, settle_seconds=5, accept_consent=False):
         raise RuntimeError("browser exploded")
 
     import scan
@@ -505,6 +652,7 @@ def test_response_model_strips_undeclared_fields(client, mock_scanner):
     assert set(body.keys()) <= {
         "scan_id", "domain", "url", "scanned_at", "duration_seconds",
         "cookie_count", "categories", "compliance", "error", "saved",
+        "consent_click", "consent_diff",
     }
 
 
@@ -549,3 +697,95 @@ def test_client_fixture_uses_a_throwaway_database(client):
     meaningless.
     """
     assert client.get("/api/domains").json() == []
+
+
+# ---------------------------------------------------------------------------
+# 10. POST-CONSENT DIFF
+# ---------------------------------------------------------------------------
+# The feature that answers "what does accepting actually cost you?" — the
+# single most valuable thing the scanner does.
+
+def test_scan_without_accept_consent_has_no_diff(client, mock_scanner):
+    """Default behaviour is unchanged: one pass, no diff."""
+    body = client.post("/api/scan", json={"url": "https://example.com"}).json()
+    assert body["consent_click"] is None
+    assert body["consent_diff"] is None
+
+
+def test_scan_with_accept_consent_returns_a_diff(client, mock_scanner):
+    body = client.post("/api/scan", json={
+        "url": "https://example.com", "accept_consent": True,
+    }).json()
+
+    assert body["consent_click"]["clicked"] is True
+    diff = body["consent_diff"]
+    assert diff is not None
+    assert diff["pre_consent_count"] == 1        # just _ga before
+    assert diff["post_consent_count"] == 3       # _ga, _fbp, IDE after
+    assert diff["added_count"] == 2
+
+
+def test_diff_reports_what_consent_unlocked(client, mock_scanner):
+    """The headline: which categories and vendors accepting adds."""
+    diff = client.post("/api/scan", json={
+        "url": "https://example.com", "accept_consent": True,
+    }).json()["consent_diff"]
+
+    assert diff["added_by_category"]["marketing"] == 2   # _fbp + IDE
+    vendors = {v["vendor"] for v in diff["vendors_added"]}
+    assert any("Meta" in v for v in vendors)
+
+
+def test_diff_multiplier_quantifies_the_cost(client, mock_scanner):
+    """1 cookie before, 3 after = 3x more tracking."""
+    diff = client.post("/api/scan", json={
+        "url": "https://example.com", "accept_consent": True,
+    }).json()["consent_diff"]
+    assert diff["multiplier"] == 3.0
+
+
+def test_diff_flags_pre_consent_violations(client, mock_scanner):
+    """
+    THE COMPLIANCE FINDING. `_ga` is analytics and was present BEFORE the
+    click, so it was set without permission.
+    """
+    diff = client.post("/api/scan", json={
+        "url": "https://example.com", "accept_consent": True,
+    }).json()["consent_diff"]
+    assert diff["pre_consent_violations"] == 1
+    assert diff["violation_categories"]["analytics"] == 1
+    assert diff["verdict"] == "minor"
+
+
+def test_score_uses_pre_consent_cookies_only(client, mock_scanner):
+    """
+    ⚠ The score must NOT punish a site for cookies set after an explicit
+    "Accept all" — those are consented-to and lawful. Scoring the post-consent
+    set would penalise sites for honouring consent correctly, which is exactly
+    backwards.
+    """
+    with_consent = client.post("/api/scan", json={
+        "url": "https://example.com", "accept_consent": True, "save": False,
+    }).json()
+    without = client.post("/api/scan", json={
+        "url": "https://example.com", "save": False,
+    }).json()
+
+    # Same pre-consent cookies -> same score, despite 2 extra cookies found.
+    assert with_consent["compliance"]["score"] == without["compliance"]["score"]
+
+
+def test_diff_is_persisted_and_readable(client, mock_scanner):
+    body = client.post("/api/scan", json={
+        "url": "https://example.com", "accept_consent": True,
+    }).json()
+
+    scan = client.get(f"/api/scans/{body['scan_id']}").json()
+    assert scan["consent_clicked"] is True
+    assert scan["consent_method"] == "cmp_selector"
+    assert scan["cookies_added_by_consent"] == 2
+    assert scan["consent_verdict"] == "minor"
+
+    # Each cookie records which side of the click it appeared on.
+    after = [c for c in scan["cookies"] if c["set_after_consent"]]
+    assert len(after) == 2

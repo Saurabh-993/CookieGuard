@@ -61,6 +61,7 @@ from pathlib import Path
 # `__file__` is this file; .parent is api/; .parent.parent is the project root.
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
 from classifier import classify_scan, load_trackers  # noqa: E402
+from jurisdictions import summarise_data_flows       # noqa: E402
 
 
 # ---------------------------------------------------------------------------
@@ -395,12 +396,68 @@ def init_db(db_path=None) -> None:
     conn = get_connection(db_path)
     try:
         conn.executescript(SCHEMA_SQL)
+        _migrate(conn)
         conn.commit()
     finally:
         # `finally` runs whether or not an exception happened, so the
         # connection is always released. Leaked connections hold file locks,
         # and in SQLite a stale lock blocks every other writer.
         conn.close()
+
+
+def _migrate(conn) -> None:
+    """
+    Add columns that didn't exist in earlier versions of the schema.
+
+    WHY THIS IS NEEDED
+    ------------------
+    `CREATE TABLE IF NOT EXISTS` only creates a table that's missing. It does
+    NOT alter one that already exists. So when the consent-diff feature added
+    new columns, every database created before that change would still have the
+    old shape — and every INSERT would fail with "no such column".
+
+    That's a SCHEMA MIGRATION: changing the shape of a database that already
+    holds data you can't afford to lose.
+
+    THE PATTERN
+    -----------
+        1. Ask what columns exist       (PRAGMA table_info)
+        2. Add only the missing ones    (ALTER TABLE ... ADD COLUMN)
+        3. Never drop or rename         (that's how you lose data)
+
+    Real projects use a migration tool for this — Alembic in the Python world —
+    which keeps a numbered list of changes and records which have run. That's
+    the right answer once migrations get complex. For four added columns, an
+    explicit idempotent check is simpler and easier to defend.
+
+    Note this is IDEMPOTENT: running it repeatedly is safe, because it checks
+    before it acts. Same property as `init_db` itself.
+    """
+    def columns(table):
+        # PRAGMA is SQLite's mechanism for asking about its own structure.
+        return {row["name"] for row in conn.execute(f"PRAGMA table_info({table})")}
+
+    scan_cols = columns("scans")
+    for name, ddl in [
+        ("consent_clicked", "INTEGER DEFAULT 0"),
+        ("consent_method", "TEXT"),
+        ("consent_detail", "TEXT"),
+        ("pre_consent_count", "INTEGER"),
+        ("post_consent_count", "INTEGER"),
+        ("cookies_added_by_consent", "INTEGER DEFAULT 0"),
+        ("consent_multiplier", "REAL"),
+        ("consent_verdict", "TEXT"),
+    ]:
+        if name not in scan_cols:
+            conn.execute(f"ALTER TABLE scans ADD COLUMN {name} {ddl}")
+
+    # One boolean on the cookies table records which side of the click each
+    # cookie appeared on. One list with a flag beats two separate lists:
+    # "show me everything that needed consent" becomes a WHERE clause.
+    if "set_after_consent" not in columns("cookies"):
+        conn.execute(
+            "ALTER TABLE cookies ADD COLUMN set_after_consent INTEGER DEFAULT 0"
+        )
 
 
 def _now() -> str:
@@ -546,6 +603,36 @@ def save_scan(scan_result: dict, db_path=None) -> int:
         )
         scan_id = cur.lastrowid
 
+        # ---- consent diff, if the scan did a second pass ----
+        # Written with a separate UPDATE rather than adding eight more
+        # placeholders to the INSERT above. That INSERT already has 22; adding
+        # more makes miscounting them almost inevitable, and a mismatched
+        # placeholder count is a genuinely miserable bug to find.
+        click = scan_result.get("consent_click") or {}
+        diff = scan_result.get("consent_diff") or {}
+        if click or diff:
+            conn.execute(
+                """
+                UPDATE scans SET
+                    consent_clicked = ?, consent_method = ?, consent_detail = ?,
+                    pre_consent_count = ?, post_consent_count = ?,
+                    cookies_added_by_consent = ?, consent_multiplier = ?,
+                    consent_verdict = ?
+                WHERE id = ?
+                """,
+                (
+                    int(bool(click.get("clicked"))),
+                    click.get("method"),
+                    click.get("detail"),
+                    diff.get("pre_consent_count"),
+                    diff.get("post_consent_count"),
+                    diff.get("added_count", 0),
+                    diff.get("multiplier"),
+                    diff.get("verdict"),
+                    scan_id,
+                ),
+            )
+
         # ---- 2. the cookies ----
         # Build a list of tuples, then insert them all at once with
         # `executemany`. One round-trip to the database instead of 177 is
@@ -562,6 +649,7 @@ def save_scan(scan_result: dict, db_path=None) -> int:
                 c.get("same_site"), c.get("value_length"),
                 c.get("category"), c.get("vendor"), c.get("purpose"),
                 c.get("matched_by"), c.get("confidence"),
+                int(bool(c.get("set_after_consent"))),
             )
             for c in scan_result.get("cookies", [])
         ]
@@ -571,8 +659,9 @@ def save_scan(scan_result: dict, db_path=None) -> int:
                 INSERT INTO cookies (
                     scan_id, name, domain, path, party, cookie_type,
                     expires_at, lifetime_days, http_only, secure, same_site,
-                    value_length, category, vendor, purpose, matched_by, confidence
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    value_length, category, vendor, purpose, matched_by, confidence,
+                    set_after_consent
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 cookie_rows,
             )
@@ -715,6 +804,73 @@ def get_scans_for_domain(domain: str, limit: int = 50,
             (domain, limit),
         )
         return [dict(r) for r in cur.fetchall()]
+    finally:
+        conn.close()
+
+
+def list_scans(domain=None, grade=None, limit=100, offset=0, db_path=None) -> dict:
+    """
+    Every scan across every domain, newest first, with optional filters.
+
+    Powers the Scan History panel. Returns a dict with `items` and `total`,
+    not a bare list, because the UI needs to know how many rows exist beyond
+    the page it's showing.
+
+    BUILDING SQL CONDITIONALLY — safely
+    -----------------------------------
+    The filters are optional, so the WHERE clause has to be assembled at
+    runtime. That is exactly the situation where people reach for f-strings
+    and introduce SQL injection.
+
+    The safe pattern: build a list of CONDITION FRAGMENTS containing `?`
+    placeholders, and a parallel list of VALUES. The fragments are literal
+    strings we wrote; only the values come from the user, and those still
+    travel separately.
+
+        conditions = ["d.domain = ?"]        ← our text, never user input
+        params     = [domain]                ← user input, safely bound
+
+    The rule holds: the SQL TEXT is always something we wrote. User data never
+    becomes part of the statement.
+    """
+    conn = get_connection(db_path)
+    try:
+        conditions = []
+        params = []
+
+        if domain:
+            conditions.append("d.domain = ?")
+            params.append(domain)
+        if grade:
+            conditions.append("s.compliance_grade = ?")
+            params.append(grade)
+
+        where = ("WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        # Total count BEFORE paging, so the UI can say "showing 20 of 137".
+        cur = conn.execute(
+            f"""
+            SELECT COUNT(*) AS n
+            FROM scans s
+            INNER JOIN domains d ON d.id = s.domain_id
+            {where}
+            """,
+            params,
+        )
+        total = cur.fetchone()["n"]
+
+        cur = conn.execute(
+            f"""
+            SELECT s.*, d.domain
+            FROM scans s
+            INNER JOIN domains d ON d.id = s.domain_id
+            {where}
+            ORDER BY s.scanned_at DESC
+            LIMIT ? OFFSET ?
+            """,
+            params + [limit, offset],
+        )
+        return {"items": [dict(r) for r in cur.fetchall()], "total": total}
     finally:
         conn.close()
 
@@ -895,6 +1051,88 @@ def get_domain_report(domain: str, db_path=None) -> dict:
             else:
                 trend = "stable"
 
+        # ------------------------------------------------------------------
+        # EXTRA INSIGHT METRICS (added after Phase 4 review)
+        # ------------------------------------------------------------------
+        # All four are computed from the LATEST scan's cookies, because a
+        # compliance officer asks "what is the situation now?", not "what was
+        # the average across six months?".
+        latest_cookies = []
+        latest_domains = []
+        if latest:
+            cur = conn.execute(
+                "SELECT * FROM cookies WHERE scan_id = ?", (latest["id"],))
+            latest_cookies = [dict(r) for r in cur.fetchall()]
+            cur = conn.execute(
+                "SELECT * FROM third_party_domains WHERE scan_id = ? "
+                "ORDER BY request_count DESC LIMIT 40", (latest["id"],))
+            latest_domains = [dict(r) for r in cur.fetchall()]
+
+        # 1. WHERE DOES THE DATA GO? (GDPR Chapter V — international transfers)
+        data_flows = summarise_data_flows(latest_cookies)
+
+        # 2. HOW LONG DO COOKIES LIVE?
+        #    France's CNIL recommends a 13-month maximum for analytics cookies,
+        #    so the buckets are chosen around that threshold rather than being
+        #    evenly spaced — the interesting question is "how many cross the
+        #    line", not "what's the distribution".
+        buckets = [
+            {"label": "Session", "min": None, "max": None, "count": 0},
+            {"label": "≤ 1 day", "min": 0, "max": 1, "count": 0},
+            {"label": "≤ 1 month", "min": 1, "max": 31, "count": 0},
+            {"label": "≤ 6 months", "min": 31, "max": 183, "count": 0},
+            {"label": "≤ 13 months", "min": 183, "max": 400, "count": 0},
+            {"label": "> 13 months", "min": 400, "max": None, "count": 0},
+        ]
+        for c in latest_cookies:
+            days = c.get("lifetime_days")
+            if days is None:
+                buckets[0]["count"] += 1
+            elif days <= 1:
+                buckets[1]["count"] += 1
+            elif days <= 31:
+                buckets[2]["count"] += 1
+            elif days <= 183:
+                buckets[3]["count"] += 1
+            elif days <= 400:
+                buckets[4]["count"] += 1
+            else:
+                buckets[5]["count"] += 1
+
+        lifetime_buckets = [
+            {"label": b["label"], "count": b["count"],
+             "excessive": b["label"] == "> 13 months"}
+            for b in buckets
+        ]
+
+        # 3. SECURITY POSTURE
+        #    These flags are a security finding rather than a consent one, but
+        #    they belong in the same audit: a session cookie without HttpOnly
+        #    is readable by any injected script (see the XSS discussion in §63).
+        n = len(latest_cookies) or 1     # avoid dividing by zero
+        secure_n = sum(1 for c in latest_cookies if c.get("secure"))
+        httponly_n = sum(1 for c in latest_cookies if c.get("http_only"))
+        samesite_none = [
+            c for c in latest_cookies
+            if c.get("same_site") in (None, "", "None")
+        ]
+        cross_site = [
+            c for c in samesite_none if c.get("party") == "third"
+        ]
+        security_posture = {
+            "total": len(latest_cookies),
+            "secure_count": secure_n,
+            "secure_pct": round(100 * secure_n / n, 1),
+            "http_only_count": httponly_n,
+            "http_only_pct": round(100 * httponly_n / n, 1),
+            "samesite_none_count": len(samesite_none),
+            "cross_site_tracker_count": len(cross_site),
+            # Third-party + SameSite=None is the clearest technical fingerprint
+            # of a cross-site tracker, so we surface it as its own number.
+            "third_party_count": sum(
+                1 for c in latest_cookies if c.get("party") == "third"),
+        }
+
         return {
             "domain": domain,
             "first_seen": domain_row["first_seen"],
@@ -905,6 +1143,11 @@ def get_domain_report(domain: str, db_path=None) -> dict:
             "unknown_cookies": unknowns,
             "history": history,
             "trend": trend,
+            # --- new ---
+            "data_flows": data_flows,
+            "lifetime_buckets": lifetime_buckets,
+            "security_posture": security_posture,
+            "third_party_domains": latest_domains,
         }
     finally:
         conn.close()

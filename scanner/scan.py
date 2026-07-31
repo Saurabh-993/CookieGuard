@@ -202,6 +202,7 @@ async def scan_website(
     url: str,
     headless: bool = True,
     settle_seconds: int = DEFAULT_SETTLE_SECONDS,
+    accept_consent: bool = False,
 ) -> dict:
     """
     Visit `url` in a real browser and return everything we observed as a dict.
@@ -384,6 +385,37 @@ async def scan_website(
         # operator, not a script running inside the page.
         raw_cookies = await context.cookies()
 
+        # -------------------------------------------------------------------
+        # STEP 6b — OPTIONAL SECOND PASS: click "Accept all", then look again
+        # -------------------------------------------------------------------
+        # THIS IS THE MOST VALUABLE THING THE SCANNER DOES.
+        #
+        # Everything above captured the PRE-CONSENT state. Now we click the
+        # banner and watch what appears. The difference between the two answers
+        # the question people actually have: what does accepting cost you?
+        #
+        # WHY THE SAME BROWSER SESSION, not a second scan?
+        #   * It's what actually happens to a real visitor — they don't reload
+        #   * The pre-consent cookies are still there, so the diff is exact
+        #   * One browser launch instead of two: roughly half the time
+        raw_post_cookies = None
+        consent_click = None
+        post_requests_start = len(network_requests)
+
+        if accept_consent:
+            # Local import: only this code path needs it.
+            from consent_clicker import accept_consent as click_accept
+
+            consent_click = await click_accept(page)
+
+            if consent_click.get("clicked"):
+                # Wait again. Newly-unblocked scripts have to download and run
+                # before their cookies exist — clicking and immediately reading
+                # would find almost nothing and report a false "consent adds
+                # no tracking", which is the worst possible wrong answer.
+                await asyncio.sleep(settle_seconds + 2)
+                raw_post_cookies = await context.cookies()
+
         # Grab a couple of page facts for the report. Wrapped in try/except
         # because if navigation failed there may be no page to read.
         try:
@@ -409,38 +441,45 @@ async def scan_website(
     # on OUR format, not Playwright's — so if we ever swap out Playwright,
     # only this file changes.
 
-    cookies = []
-    for c in raw_cookies:
-        # `c.get("key", default)` reads a dict key safely: if the key is
-        # missing it returns the default instead of raising KeyError.
-        cookie_domain = c.get("domain", "")
-        expiry_info = describe_expiry(c.get("expires", -1))
+    def reshape(raw_list):
+        """
+        Convert Playwright's cookie dicts into OUR format.
 
-        cookies.append({
-            "name": c.get("name"),
-            "domain": cookie_domain,
-            # The URL path the cookie applies to. "/" means the whole site.
-            "path": c.get("path", "/"),
-            "party": classify_party(cookie_domain, site_domain),
-            "type": expiry_info["type"],
-            "expires_at": expiry_info["expires_at"],
-            "lifetime_days": expiry_info["lifetime_days"],
-            # SECURITY FLAGS — these matter for the compliance report:
-            # httpOnly  : JavaScript cannot read this cookie. Protects session
-            #             tokens against XSS attacks. Good practice.
-            "http_only": c.get("httpOnly", False),
-            # secure    : only ever sent over HTTPS, never plain HTTP.
-            "secure": c.get("secure", False),
-            # sameSite  : controls whether the cookie is sent on cross-site
-            #             requests. "Strict"/"Lax" limit tracking; "None"
-            #             explicitly allows it and is the tracker's setting.
-            "same_site": c.get("sameSite", "None"),
-            # We deliberately do NOT store the cookie's VALUE. It may contain
-            # personal data, and storing it would make our own audit tool a
-            # privacy liability. We only need the metadata to classify it.
-            # This is a defensible design decision worth stating in interview.
-            "value_length": len(c.get("value", "")),
-        })
+        Extracted into a local function because we now do this twice — once
+        for the pre-consent cookies and once for post-consent. Two copies of
+        this mapping would eventually drift apart, and then the diff would
+        compare cookies described in two slightly different ways.
+        """
+        out = []
+        for c in raw_list:
+            cookie_domain = c.get("domain", "")
+            expiry_info = describe_expiry(c.get("expires", -1))
+            out.append({
+                "name": c.get("name"),
+                "domain": cookie_domain,
+                # The URL path the cookie applies to. "/" = the whole site.
+                "path": c.get("path", "/"),
+                "party": classify_party(cookie_domain, site_domain),
+                "type": expiry_info["type"],
+                "expires_at": expiry_info["expires_at"],
+                "lifetime_days": expiry_info["lifetime_days"],
+                # SECURITY FLAGS — these matter for the compliance report:
+                # httpOnly : JavaScript cannot read it. Protects session
+                #            tokens against XSS. Good practice.
+                "http_only": c.get("httpOnly", False),
+                # secure   : only ever sent over HTTPS.
+                "secure": c.get("secure", False),
+                # sameSite : controls cross-site sending. "None" is the
+                #            tracker's setting.
+                "same_site": c.get("sameSite", "None"),
+                # We deliberately do NOT store the cookie's VALUE — it may
+                # contain personal data, and storing it would make our own
+                # audit tool a privacy liability.
+                "value_length": len(c.get("value", "")),
+            })
+        return out
+
+    cookies = reshape(raw_cookies)
 
     # ----- Summarise the network requests by domain -----
     # Hundreds of raw requests are unreadable. What matters is: WHICH other
@@ -491,6 +530,15 @@ async def scan_website(
         # Keep the full request list too — Phase 2's classifier will scan these
         # URLs for tracker signatures (e.g. spotting "facebook.com/tr" pixels).
         "requests": network_requests,
+
+        # --- Post-consent pass (only present when accept_consent=True) ---
+        # `consent_click` records WHAT was clicked, so the finding stays
+        # auditable. `post_consent_cookies` is the raw second reading; the
+        # actual diff is computed after classification, because comparing
+        # categories requires both sides to be classified first.
+        "consent_click": consent_click,
+        "post_consent_cookies": reshape(raw_post_cookies)
+                                if raw_post_cookies is not None else None,
     }
 
 
@@ -555,6 +603,29 @@ def print_report(result: dict) -> None:
     else:
         print("  (none — this site contacts no external domains)")
 
+    # ----- Consent diff, if we did a second pass -----
+    click = result.get("consent_click")
+    if click:
+        print(f"\n  CONSENT BANNER")
+        print(f"  {sub}")
+        if click.get("clicked"):
+            print(f"  Clicked: \"{click.get('text')}\"")
+            print(f"  Found via: {click.get('method')} ({click.get('detail')})")
+            post = result.get("post_consent_cookies")
+            if post is not None:
+                before = result["cookie_count"]
+                after = len(post)
+                print(f"\n  BEFORE consent: {before} cookies")
+                print(f"  AFTER consent:  {after} cookies"
+                      f"   (+{after - before})")
+                if before:
+                    print(f"  Accepting multiplied tracking by "
+                          f"{round(after / before, 1)}x")
+        else:
+            print(f"  No accept button found ({click.get('method')}).")
+            print(f"  NOTE: 'no banner found' is NOT the same as "
+                  f"'no tracking added'.")
+
     print(f"{line}\n")
 
 
@@ -591,6 +662,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional path to save the full result as JSON, e.g. data/example.json",
     )
+    parser.add_argument(
+        "--accept-consent",
+        action="store_true",
+        help=("Also click 'Accept all' and scan again, then report the "
+              "difference. This is the most useful thing the scanner does."),
+    )
     return parser
 
 
@@ -626,6 +703,7 @@ async def main_async() -> int:
             # `--headed` present means headless should be False. Hence `not`.
             headless=not args.headed,
             settle_seconds=args.wait,
+            accept_consent=args.accept_consent,
         )
     except Exception as e:
         # Catch-all so the user gets a clear message instead of a raw traceback.
