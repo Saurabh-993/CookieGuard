@@ -1,0 +1,667 @@
+/* ==========================================================================
+   CookieGuard — Dashboard styles (Phase 4)
+   ==========================================================================
+
+   HOW CSS WORKS, IN THREE LINES
+   -----------------------------
+       selector { property: value; }
+
+       .card    { padding: 20px; }     ← every element with class="card"
+       #tooltip { display: none; }     ← the one element with id="tooltip"
+       button   { cursor: pointer; }   ← every <button> on the page
+
+   CSS = Cascading Style Sheets. "Cascading" means rules flow down and can
+   override each other. When two rules touch the same element, the more
+   SPECIFIC one wins:
+
+       element (button)        specificity 1
+       class   (.btn)          specificity 10
+       id      (#scan-btn)     specificity 100
+
+   Fighting specificity is the main way CSS gets unmaintainable. This file
+   stays almost entirely at the class level, which keeps it predictable.
+   ========================================================================== */
+
+
+/* ==========================================================================
+   1. CUSTOM PROPERTIES (CSS VARIABLES)
+   ==========================================================================
+   `:root` is the <html> element — the top of the tree. Variables defined here
+   are visible everywhere.
+
+   WHY THIS MATTERS: the category colours appear in the tables, the chips, the
+   donut chart and the legend. Defined once here, changing "marketing" from red
+   to orange is a one-line edit instead of a search-and-replace across three
+   files. app.js reads these same variables so the D3 charts match the tables
+   exactly — one source of truth for colour.
+   ========================================================================== */
+
+:root {
+  /* Brand */
+  --brand:          #4f46e5;
+  --brand-dark:     #3730a3;
+  --brand-light:    #eef2ff;
+
+  /* Compliance categories — ordered least to most concerning */
+  --necessary:      #059669;   /* green  — exempt from consent */
+  --functional:     #0284c7;   /* blue   — consent required */
+  --analytics:      #d97706;   /* amber  — consent required */
+  --marketing:      #dc2626;   /* red    — highest scrutiny */
+  --unknown:        #6b7280;   /* grey   — needs human review */
+
+  /* Neutrals */
+  --bg:             #f8fafc;
+  --surface:        #ffffff;
+  --border:         #e2e8f0;
+  --text:           #0f172a;
+  --text-muted:     #64748b;
+
+  /* Grades */
+  --grade-a:        #059669;
+  --grade-b:        #65a30d;
+  --grade-c:        #d97706;
+  --grade-d:        #ea580c;
+  --grade-f:        #dc2626;
+
+  --radius:         10px;
+  --shadow:         0 1px 3px rgba(15, 23, 42, .08);
+  --shadow-lg:      0 4px 16px rgba(15, 23, 42, .10);
+}
+
+
+/* ==========================================================================
+   2. RESET
+   ==========================================================================
+   Browsers ship their own default styles, and they differ. A small reset gives
+   every browser the same starting point.
+   ========================================================================== */
+
+* {
+  /* THE MOST USEFUL LINE IN MODERN CSS.
+     By default, `width: 200px` + `padding: 20px` produces a 240px-wide box —
+     padding is ADDED to the width. `border-box` makes width mean the TOTAL
+     width, padding included. Almost nobody wants the default behaviour. */
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  /* A "font stack": try each in order, use the first available. This one uses
+     whatever the operating system's own UI font is, so the page looks native
+     on Windows, macOS and Android without downloading anything. */
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+               "Helvetica Neue", Arial, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;          /* unitless = 1.55 × the element's own size */
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3 { line-height: 1.25; font-weight: 650; }
+h1 { font-size: 1.35rem; }
+h2 { font-size: 1.1rem; }
+h3 { font-size: 1rem; }
+
+code {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: .85em;
+  background: #f1f5f9;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.muted { color: var(--text-muted); }
+.small { font-size: .85rem; }
+.num   { text-align: right; }
+
+
+/* ==========================================================================
+   3. HEADER
+   ========================================================================== */
+
+.site-header {
+  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
+  color: #fff;
+  padding: 18px 0;
+}
+
+.header-inner {
+  max-width: 1280px;
+  margin: 0 auto;          /* `0 auto` = no vertical margin, auto horizontal
+                              → equal left/right margins → centred */
+  padding: 0 24px;
+
+  /* FLEXBOX — lays children out in a row or column.
+     This is the single most common layout job: push one thing left, another
+     right, keep both vertically centred. */
+  display: flex;
+  justify-content: space-between;  /* main axis (horizontal): push apart */
+  align-items: center;             /* cross axis (vertical): centre */
+  gap: 16px;
+  flex-wrap: wrap;                 /* stack instead of overflow on narrow screens */
+}
+
+.brand { display: flex; align-items: center; gap: 12px; }
+.brand-icon { font-size: 2rem; }
+.tagline { font-size: .82rem; opacity: .85; }
+
+.api-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: .82rem;
+  background: rgba(255, 255, 255, .15);
+  padding: 6px 14px;
+  border-radius: 999px;      /* an absurdly large radius = a perfect pill */
+}
+
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-ok      { background: #4ade80; }
+.dot-error   { background: #f87171; }
+.dot-pending { background: #fbbf24; }
+
+
+/* ==========================================================================
+   4. TABS
+   ========================================================================== */
+
+.tabs {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 4px;
+  padding: 0 24px;
+  max-width: 1280px;
+  margin: 0 auto;
+  overflow-x: auto;          /* scroll sideways on a phone rather than squash */
+}
+
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 3px solid transparent;   /* reserve the space now, so the
+                                             active state doesn't shift layout */
+  padding: 14px 18px;
+  font-size: .92rem;
+  font-weight: 550;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color .15s, border-color .15s;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab-active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+}
+
+
+/* ==========================================================================
+   5. LAYOUT
+   ========================================================================== */
+
+.container {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+/* Only one view is visible at a time. app.js swaps the class.
+   This is how a "single-page app" changes screens without a page load. */
+.view          { display: none; }
+.view-active   { display: block; }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+
+
+/* ==========================================================================
+   6. FORMS AND BUTTONS
+   ========================================================================== */
+
+.scan-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+
+.input {
+  flex: 1;                   /* grow to fill the leftover space */
+  min-width: 200px;          /* ...but never below this, or it collapses */
+  padding: 10px 14px;
+  font-size: .92rem;
+  font-family: inherit;      /* inputs don't inherit body font by default */
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.input-narrow { flex: 0 0 auto; min-width: 110px; }
+
+.input:focus {
+  outline: none;
+  border-color: var(--brand);
+  /* A visible focus ring. NEVER remove focus styling without replacing it —
+     keyboard users rely on it to know where they are. */
+  box-shadow: 0 0 0 3px var(--brand-light);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  font-size: .92rem;
+  font-family: inherit;
+  font-weight: 550;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background .15s, border-color .15s;
+}
+
+.btn-primary { background: var(--brand); color: #fff; }
+.btn-primary:hover:not(:disabled) { background: var(--brand-dark); }
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+.btn-ghost:hover { background: var(--bg); color: var(--text); }
+
+.btn-link {
+  background: none;
+  border: none;
+  color: var(--brand);
+  cursor: pointer;
+  font-size: .85rem;
+  font-family: inherit;
+  padding: 2px 6px;
+  text-decoration: underline;
+}
+
+/* `:disabled` styles the button while a scan is running, so it's obvious
+   the click registered and a second click won't do anything. */
+.btn:disabled { opacity: .6; cursor: not-allowed; }
+
+
+/* ---- Spinner -----------------------------------------------------------
+   A circle with one differently-coloured edge, rotated forever. No image,
+   no JavaScript — 8 lines of CSS. */
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(255, 255, 255, .35);
+  border-top-color: #fff;          /* the one visible edge */
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }   /* "from" defaults to the current state */
+}
+
+
+/* ==========================================================================
+   7. TABLES
+   ========================================================================== */
+
+.table-wrap {
+  /* Tables have a minimum sensible width. On a phone, let the TABLE scroll
+     sideways inside this box rather than forcing the whole PAGE to scroll. */
+  overflow-x: auto;
+  margin-top: 14px;
+}
+
+.data-table {
+  width: 100%;
+  border-collapse: collapse;   /* single shared borders, not doubled ones */
+  font-size: .88rem;
+}
+
+.data-table th {
+  text-align: left;
+  font-weight: 600;
+  font-size: .74rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+  padding: 10px 12px;
+  border-bottom: 2px solid var(--border);
+  white-space: nowrap;
+}
+
+.data-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  vertical-align: middle;
+}
+
+.data-table tbody tr:hover { background: var(--bg); }
+
+.mono {
+  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-size: .84em;
+}
+
+.row-clickable { cursor: pointer; }
+
+
+/* ==========================================================================
+   8. BADGES, CHIPS, PILLS
+   ==========================================================================
+   The category colour system, used identically in tables, filters and charts.
+   ========================================================================== */
+
+.badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: .72rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  color: #fff;
+  white-space: nowrap;
+}
+
+.badge-necessary  { background: var(--necessary); }
+.badge-functional { background: var(--functional); }
+.badge-analytics  { background: var(--analytics); }
+.badge-marketing  { background: var(--marketing); }
+.badge-unknown    { background: var(--unknown); }
+
+.pill {
+  display: inline-block;
+  padding: 1px 8px;
+  border-radius: 5px;
+  font-size: .7rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  color: var(--text-muted);
+  margin-right: 4px;
+}
+
+.pill-warn { background: #fef3c7; color: #92400e; }
+
+.filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.chip-row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.chip {
+  padding: 5px 13px;
+  font-size: .8rem;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all .15s;
+}
+
+.chip:hover { border-color: var(--brand); color: var(--brand); }
+
+.chip-active {
+  background: var(--brand);
+  border-color: var(--brand);
+  color: #fff;
+}
+
+
+/* ==========================================================================
+   9. STAT TILES
+   ==========================================================================
+   CSS GRID — the right tool when you want a grid of equal cells.
+
+   `repeat(auto-fit, minmax(140px, 1fr))` is worth understanding:
+       minmax(140px, 1fr)  each column is at least 140px, otherwise an equal share
+       auto-fit            fit as many columns as will fit, then wrap
+
+   The result reflows from 6 columns to 2 as the window narrows, with NO media
+   query at all. Grid handles it.
+   ========================================================================== */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.stat {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.stat-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+.stat-label {
+  font-size: .72rem;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+  color: var(--text-muted);
+  margin-top: 3px;
+}
+
+
+/* ==========================================================================
+   10. SCORE DISPLAY
+   ========================================================================== */
+
+.report-head {
+  display: flex;
+  gap: 24px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 16px;
+}
+
+.score-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 132px;
+  height: 132px;
+  border-radius: 50%;
+  color: #fff;
+  flex-shrink: 0;      /* never let flexbox squash the circle into an oval */
+}
+
+.score-number { font-size: 2.6rem; font-weight: 750; line-height: 1; }
+.score-grade  { font-size: .85rem; font-weight: 600; opacity: .9; margin-top: 2px; }
+
+.grade-A { background: var(--grade-a); }
+.grade-B { background: var(--grade-b); }
+.grade-C { background: var(--grade-c); }
+.grade-D { background: var(--grade-d); }
+.grade-F { background: var(--grade-f); }
+
+.report-meta { flex: 1; min-width: 240px; }
+.report-meta h3 { margin-bottom: 4px; }
+
+.verdict { font-size: .92rem; margin-bottom: 10px; }
+
+.trend {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-size: .78rem;
+  font-weight: 600;
+}
+.trend-improving { background: #d1fae5; color: #065f46; }
+.trend-worsening { background: #fee2e2; color: #991b1b; }
+.trend-stable    { background: #e0e7ff; color: #3730a3; }
+.trend-insufficient { background: #f1f5f9; color: var(--text-muted); }
+
+
+/* ==========================================================================
+   11. CHARTS
+   ========================================================================== */
+
+.chart-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+}
+
+.chart-card { margin-bottom: 0; }
+
+.chart {
+  width: 100%;
+  height: 260px;
+  display: block;
+  overflow: visible;    /* let axis labels sit slightly outside the box */
+}
+
+.chart-wide { height: 300px; }
+
+/* SVG elements are styled with SVG-specific properties: `fill` not
+   `background`, `stroke` not `border`. */
+.axis text  { font-size: 11px; fill: var(--text-muted); }
+.axis line,
+.axis path  { stroke: var(--border); }
+
+.grid-line  { stroke: var(--border); stroke-dasharray: 3 3; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  margin-top: 12px;
+  font-size: .8rem;
+}
+
+.legend-item { display: flex; align-items: center; gap: 6px; }
+.legend-swatch { width: 11px; height: 11px; border-radius: 3px; flex-shrink: 0; }
+
+
+/* ---- Tooltip ---- */
+
+.tooltip {
+  position: fixed;        /* fixed = positioned against the viewport, so it
+                             follows the cursor correctly even when scrolled */
+  pointer-events: none;   /* CRUCIAL: let mouse events pass THROUGH the
+                             tooltip. Without this the tooltip appears under
+                             the cursor, steals the mouseout, and the chart
+                             flickers endlessly. */
+  background: #0f172a;
+  color: #fff;
+  padding: 8px 12px;
+  border-radius: 7px;
+  font-size: .8rem;
+  line-height: 1.45;
+  box-shadow: var(--shadow-lg);
+  z-index: 100;           /* stack above everything else */
+  max-width: 260px;
+}
+
+.tooltip strong { display: block; margin-bottom: 2px; }
+
+
+/* ==========================================================================
+   12. ALERTS AND EMPTY STATES
+   ========================================================================== */
+
+.alert {
+  border-radius: var(--radius);
+  padding: 14px 18px;
+  margin-bottom: 20px;
+  font-size: .9rem;
+}
+
+.alert-error   { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
+.alert-success { background: #d1fae5; border: 1px solid #a7f3d0; color: #065f46; }
+.alert-info    { background: var(--brand-light); border: 1px solid #c7d2fe; color: var(--brand-dark); }
+.alert-hint    { margin-top: 6px; font-size: .84rem; opacity: .85; }
+
+.scan-status { margin-top: 14px; padding: 12px 16px; border-radius: 8px; font-size: .88rem; }
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 28px 16px;
+  font-size: .9rem;
+}
+
+.site-footer {
+  text-align: center;
+  padding: 28px 24px;
+  color: var(--text-muted);
+  font-size: .82rem;
+}
+
+
+/* ==========================================================================
+   13. RESPONSIVE
+   ==========================================================================
+   A MEDIA QUERY applies rules only when a condition holds.
+
+   We write mobile adjustments in `max-width` blocks, meaning "when the screen
+   is at most this wide". Note how few overrides are needed — flexbox's
+   `flex-wrap` and grid's `auto-fit` already did most of the work. Reaching for
+   a media query should be the exception, not the plan.
+   ========================================================================== */
+
+@media (max-width: 720px) {
+  .container      { padding: 16px; }
+  .card           { padding: 16px; }
+  .header-inner   { padding: 0 16px; }
+  .tabs           { padding: 0 8px; }
+  .tab            { padding: 12px 12px; font-size: .85rem; }
+
+  .scan-form .input,
+  .scan-form .btn { width: 100%; }     /* stack the form vertically */
+
+  .report-head    { justify-content: center; text-align: center; }
+  .chart          { height: 220px; }
+  h1              { font-size: 1.15rem; }
+}
+
+
+/* ==========================================================================
+   14. PRINT
+   ==========================================================================
+   A compliance officer WILL print or PDF this report. Half a dozen lines makes
+   that output usable instead of embarrassing — and it's the kind of detail
+   that gets noticed in a portfolio review.
+   ========================================================================== */
+
+@media print {
+  .site-header, .tabs, .site-footer,
+  .scan-form, .filter-bar, .btn { display: none !important; }
+
+  body       { background: #fff; font-size: 11pt; }
+  .card      { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+  .view      { display: block !important; }   /* print every tab */
+}

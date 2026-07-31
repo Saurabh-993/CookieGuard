@@ -143,6 +143,36 @@ def test_docs_page_loads(client):
 
 
 # ---------------------------------------------------------------------------
+# 1b. THE DASHBOARD (static files)
+# ---------------------------------------------------------------------------
+# Serving the dashboard from FastAPI puts the page and the API on the SAME
+# ORIGIN, so there is no cross-origin request at all — the dashboard keeps
+# working even after CORS is tightened in Phase 7.
+
+def test_dashboard_index_is_served(client):
+    """`html=True` on the mount serves index.html for the directory root."""
+    r = client.get("/dashboard/")
+    assert r.status_code == 200
+    assert "CookieGuard" in r.text
+    assert "<table" in r.text
+
+
+def test_dashboard_assets_are_served(client):
+    for path, needle in [
+        ("/dashboard/style.css", "--marketing"),
+        ("/dashboard/app.js", "drawDonutChart"),
+    ]:
+        r = client.get(path)
+        assert r.status_code == 200, path
+        assert needle in r.text, path
+
+
+def test_root_advertises_the_dashboard(client):
+    """Someone hitting the API root should be able to find the UI."""
+    assert client.get("/").json()["dashboard"] == "/dashboard/"
+
+
+# ---------------------------------------------------------------------------
 # 2. SSRF PROTECTION — the security tests
 # ---------------------------------------------------------------------------
 # Each of these is an attack the API must refuse. They matter most in Phase 7,

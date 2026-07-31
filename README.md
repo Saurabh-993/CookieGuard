@@ -161,6 +161,7 @@ result is saved to SQLite → the API returns JSON → the dashboard renders it.
 | **Scanner** | **Python + Playwright** | Drives a *real* browser, so JavaScript runs and JS-set cookies are captured. Has a built-in `context.cookies()` API and network event hooks. Auto-waits for elements, so fewer flaky sleeps. Bundles its own browser binaries — one command to install. | **Selenium**: older API, needs a separately managed chromedriver, no first-class network interception. **BeautifulSoup/requests**: only downloads raw HTML — it cannot execute JavaScript, so it would miss the majority of real-world tracking cookies. |
 | **Backend** | **Python + FastAPI** | Async by default (a scan takes seconds — async keeps the server responsive). Auto-generates interactive Swagger docs at `/docs`, which is excellent for a portfolio demo. Uses Pydantic for automatic request validation. Same language as the scanner, so no cross-process glue. | **Flask**: synchronous by default, no built-in validation or auto docs. **Django**: heavyweight — ORM, admin, templates, auth — 90% of which we don't need for a JSON API. |
 | **Database** | **SQLite** | Zero setup — it's a single file. Ships with Python (`sqlite3` in the standard library). Perfect for a single-machine audit tool. Standard SQL, so migrating to PostgreSQL later is mostly a connection-string change. | **PostgreSQL**: needs a server process, users, and config — unnecessary friction for an MVP. **MongoDB**: our data is highly relational (domain → scan → cookies); joins and foreign keys are exactly what we want, so a relational DB is the better fit. |
+| **Charts** | **D3.js (CDN)** | Real per-element interactivity — hover tooltips, staggered animations, a self-drawing trend line. Full control over every shape. | **Chart.js**: far easier, but canvas-based, so you can't style or click individual elements, and customisation hits a wall quickly. |
 | **Frontend** | **Vanilla HTML5 + CSS3 + JS** | No build step, no `node_modules`, no bundler — open `index.html` and it works. Demonstrates that I understand `fetch`, DOM manipulation and the event loop without a framework hiding it. The consent banner **must** be framework-free anyway, since it has to drop into any customer's site. | **React**: would add a toolchain (npm, Vite, JSX transpilation) for a UI that is fundamentally a few tables and charts. Overkill, and it obscures the fundamentals. |
 | **Containerisation** | **Docker** | Guarantees the browser binaries and system libraries Playwright needs are present. "Works on my machine" becomes "works everywhere". | Bare-metal install: Playwright needs ~20 Linux shared libraries that differ per distro — a classic source of deployment pain. |
 | **CI/CD** | **GitHub Actions** | Native to GitHub, free for public repos, configured with a single YAML file. Runs lint + tests on every push. | Jenkins: needs its own server to be maintained. |
@@ -189,8 +190,8 @@ CookieGuard/
 │   └── schemas.py           # Pydantic models describing request/response JSON shapes
 │
 ├── frontend/
-│   ├── index.html           # Phase 4 — dashboard page structure
-│   ├── style.css            # Phase 4 — all styling; responsive layout
+│   ├── index.html           # dashboard structure (filled at runtime by app.js)
+│   ├── style.css            # all styling; responsive + print
 │   ├── app.js               # Phase 4 — fetches the API, renders tables and charts
 │   └── consent-banner.js    # Phase 5 — standalone drop-in consent banner
 │
@@ -484,11 +485,30 @@ Point the API at a different database with an environment variable:
 COOKIEGUARD_DB=/path/to/other.db uvicorn api.main:app
 ```
 
-### Open the dashboard (Phase 4 — coming soon)
+### Open the dashboard (Phase 4 — available now)
 
-```bash
-# With the API running, open frontend/index.html in a browser
-```
+With the API running, open:
+
+**http://127.0.0.1:8000/dashboard/**
+
+That's it — FastAPI serves the dashboard itself, so the page and the API are on
+the same origin and there's no CORS involved.
+
+The dashboard has three tabs:
+
+| Tab | What it shows |
+|-----|---------------|
+| **Domains** | Every scanned site, with average score. Includes a form to run a new scan. |
+| **Cookie Inventory** | Full cookie table for a chosen scan, filterable by category and searchable. |
+| **Audit Report** | Score, trend, and three D3 charts: category donut, top vendors, score history. |
+
+You can also open `frontend/index.html` directly from disk — it detects
+`file://` and points at `http://127.0.0.1:8000` — but the served version is
+preferred.
+
+> Charts need **D3.js**, which loads from a CDN, so the first load needs
+> internet access. Without it the tables still work and the charts show a
+> message.
 
 ---
 
@@ -577,8 +597,8 @@ Once the API exists, FastAPI will auto-generate live, testable documentation at
 | **2a** | Classifier + `trackers.json` + tests | ✅ **Done** |
 | **2b** | SQLite database + Public Suffix List fix | ✅ **Done** |
 | **3** | FastAPI REST endpoints | ✅ **Done** |
-| **4** | Dashboard (tables + charts + audit report) | ⬜ Next |
-| **5** | Consent banner | ⬜ Pending |
+| **4** | Dashboard (tables + charts + audit report) | ✅ **Done** |
+| **5** | Consent banner | ⬜ Next |
 | **6** | Docker + GitHub Actions CI/CD | ⬜ Pending |
 | **7** | AWS deployment | ⬜ Pending |
 

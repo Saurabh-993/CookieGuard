@@ -66,6 +66,7 @@ from urllib.parse import urlparse
 
 from fastapi import FastAPI, HTTPException, Query, Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 
 # Make our own modules importable however the app is launched.
 sys.path.insert(0, str(Path(__file__).parent))
@@ -315,6 +316,39 @@ def validate_scan_url(url: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# SERVING THE DASHBOARD
+# ---------------------------------------------------------------------------
+# The Phase 4 dashboard is three static files. We can serve them from the same
+# server that serves the API.
+#
+# WHY BOTHER, WHEN CORS ALREADY ALLOWS file://?
+#
+#   Opening index.html from disk works, but the browser treats it as origin
+#   `null`, so every API call is cross-origin and depends on our permissive
+#   CORS settings. Serving the dashboard from FastAPI puts the page and the API
+#   on the SAME ORIGIN — so there is no cross-origin request at all, and the
+#   dashboard would keep working even after we tighten CORS in Phase 7.
+#
+#   It also means one command starts everything, and it is how the app will be
+#   packaged in Docker.
+#
+# `html=True` makes StaticFiles serve index.html for the directory root, so
+# /dashboard/ works rather than needing /dashboard/index.html.
+#
+# The `if exists` guard matters: mounting a missing directory raises at import
+# time and would take the whole API down. A missing dashboard should not stop
+# the API serving JSON.
+
+_FRONTEND_DIR = Path(__file__).parent.parent / "frontend"
+if _FRONTEND_DIR.is_dir():
+    app.mount(
+        "/dashboard",
+        StaticFiles(directory=str(_FRONTEND_DIR), html=True),
+        name="dashboard",
+    )
+
+
+# ---------------------------------------------------------------------------
 # RUNNING THE SCANNER FROM INSIDE THE WEB SERVER
 # ---------------------------------------------------------------------------
 
@@ -439,6 +473,7 @@ def root():
         "version": API_VERSION,
         "docs": "/docs",
         "health": "/health",
+        "dashboard": "/dashboard/",
     }
 
 

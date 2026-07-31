@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<!--
+  CookieGuard — Dashboard (Phase 4)
+  =================================
+
+  WHAT THIS FILE IS
+  -----------------
+  The STRUCTURE of the dashboard. Just the skeleton: which boxes exist and
+  what they're called. It contains almost no actual content, because the
+  content comes from the API at runtime and is inserted by app.js.
+
+  THE THREE-FILE SEPARATION
+  -------------------------
+      index.html   STRUCTURE   what elements exist          (this file)
+      style.css    PRESENTATION how they look
+      app.js       BEHAVIOUR    what happens, what data fills them
+
+  This is called SEPARATION OF CONCERNS. You could put all three in one file
+  and it would work, but then changing a colour means editing the same file as
+  the data-fetching logic. Keeping them apart means each file has one job.
+
+  WHY IT'S MOSTLY EMPTY
+  ---------------------
+  Look at <tbody id="domains-tbody"></tbody> — there are no rows. There can't
+  be: we don't know what domains exist until we ask the API. app.js fetches
+  them and builds the rows.
+
+  A page whose content is created by JavaScript after load is
+  CLIENT-SIDE RENDERED. Which, note, is exactly why our scanner had to use a
+  real browser back in Phase 1 — this page would look completely empty to
+  `requests.get()`.
+
+  DOCTYPE AND LANG
+  ----------------
+  <!DOCTYPE html> tells the browser to use modern standards mode. Omit it and
+  browsers fall back to "quirks mode", emulating 1990s bugs for compatibility.
+  lang="en" helps screen readers pick the right pronunciation.
+-->
+<html lang="en">
+<head>
+  <!-- UTF-8 lets us use any character — accented names, symbols, arrows. -->
+  <meta charset="UTF-8">
+
+  <!--
+    THE VIEWPORT TAG — the single most important line for mobile.
+    Without it, phones pretend to be 980px wide and shrink the whole page,
+    making text unreadable. `width=device-width` says "use the real screen
+    width", which is what makes our CSS media queries work at all.
+  -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>CookieGuard — Cookie Compliance Dashboard</title>
+
+  <link rel="stylesheet" href="style.css">
+
+  <!--
+    D3.js from a CDN.
+    D3 = Data-Driven Documents. It binds data to page elements and draws SVG.
+    We use it for the three charts. See docs/TEACHING.md §60 for how it works.
+
+    `defer` tells the browser: download this now, but don't execute it until
+    the HTML is fully parsed. Without defer, a script in <head> blocks parsing
+    and can run before the elements it needs exist.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/d3@7" defer></script>
+  <script src="app.js" defer></script>
+</head>
+
+<body>
+
+<!--
+  SEMANTIC HTML — <header>, <nav>, <main>, <section> instead of <div> for
+  everything. They render identically, but they tell screen readers and search
+  engines what each region IS. <nav> lets a screen-reader user jump straight to
+  navigation. Using <div> everywhere throws that information away for free.
+-->
+<header class="site-header">
+  <div class="header-inner">
+    <div class="brand">
+      <span class="brand-icon">🍪</span>
+      <div>
+        <h1>CookieGuard</h1>
+        <p class="tagline">Cookie compliance scanner &amp; consent manager</p>
+      </div>
+    </div>
+
+    <!-- Live connection status, updated by app.js from GET /health -->
+    <div class="api-status" id="api-status">
+      <span class="dot dot-pending"></span>
+      <span id="api-status-text">Connecting…</span>
+    </div>
+  </div>
+</header>
+
+<!--
+  TABS.
+  `data-view` is a DATA ATTRIBUTE — a custom attribute the browser ignores but
+  JavaScript can read via element.dataset.view. It's the standard way to attach
+  your own metadata to an element without inventing invalid HTML.
+
+  aria-selected tells assistive technology which tab is active. Sighted users
+  see the highlight; screen-reader users need it stated explicitly.
+-->
+<nav class="tabs" role="tablist">
+  <button class="tab tab-active" data-view="domains"   role="tab" aria-selected="true">
+    Domains
+  </button>
+  <button class="tab" data-view="inventory" role="tab" aria-selected="false">
+    Cookie Inventory
+  </button>
+  <button class="tab" data-view="report"    role="tab" aria-selected="false">
+    Audit Report
+  </button>
+</nav>
+
+<main class="container">
+
+  <!-- Error banner. `hidden` is a real HTML attribute meaning "don't show". -->
+  <div class="alert alert-error" id="global-error" hidden>
+    <strong>Cannot reach the API.</strong>
+    <span id="global-error-detail"></span>
+    <div class="alert-hint">
+      Start it with <code>uvicorn api.main:app --reload</code>
+    </div>
+  </div>
+
+  <!-- ================================================================== -->
+  <!-- VIEW 1: DOMAINS                                                     -->
+  <!-- ================================================================== -->
+  <section class="view view-active" id="view-domains">
+
+    <!-- ---- Scan form ---- -->
+    <div class="card">
+      <h2>Scan a website</h2>
+      <p class="muted">
+        Opens a real browser, loads the page, and records every cookie set
+        <strong>before any consent is given</strong>. Takes 5–30 seconds.
+      </p>
+
+      <!--
+        A real <form>. Using a form (rather than a bare div with a button)
+        gives us Enter-to-submit and browser validation for free.
+        `novalidate` turns off the browser's own error bubbles so we can show
+        our own consistent messages instead.
+      -->
+      <form class="scan-form" id="scan-form" novalidate>
+        <input
+          type="url"
+          id="scan-url"
+          class="input"
+          placeholder="https://example.com"
+          required
+          autocomplete="url"
+        >
+        <select id="scan-wait" class="input input-narrow" title="Settle time">
+          <option value="3">3s wait</option>
+          <option value="5" selected>5s wait</option>
+          <option value="10">10s wait</option>
+          <option value="15">15s wait</option>
+        </select>
+        <button type="submit" class="btn btn-primary" id="scan-btn">
+          <span id="scan-btn-text">Scan</span>
+          <!-- The spinner is always in the DOM; CSS hides it until scanning. -->
+          <span class="spinner" id="scan-spinner" hidden></span>
+        </button>
+      </form>
+
+      <div class="scan-status" id="scan-status" hidden></div>
+    </div>
+
+    <!-- ---- Domain list ---- -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Scanned domains</h2>
+        <button class="btn btn-ghost" id="refresh-domains">Refresh</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Domain</th>
+              <th class="num">Scans</th>
+              <th class="num">Cookies</th>
+              <th>Latest score</th>
+              <th>Last scanned</th>
+              <th></th>
+            </tr>
+          </thead>
+          <!-- Filled by app.js. Empty on purpose. -->
+          <tbody id="domains-tbody"></tbody>
+        </table>
+      </div>
+
+      <p class="empty-state" id="domains-empty" hidden>
+        No domains scanned yet. Use the form above to run your first scan.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================================================================== -->
+  <!-- VIEW 2: COOKIE INVENTORY                                            -->
+  <!-- ================================================================== -->
+  <section class="view" id="view-inventory">
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Cookie inventory</h2>
+        <select id="inventory-scan-select" class="input"></select>
+      </div>
+
+      <!-- Summary tiles, filled by app.js -->
+      <div class="stat-grid" id="inventory-stats"></div>
+
+      <!-- Filters -->
+      <div class="filter-bar">
+        <input
+          type="search"
+          id="cookie-search"
+          class="input"
+          placeholder="Search name, vendor or domain…"
+        >
+        <div class="chip-row" id="category-filters">
+          <button class="chip chip-active" data-category="all">All</button>
+          <button class="chip" data-category="necessary">Necessary</button>
+          <button class="chip" data-category="functional">Functional</button>
+          <button class="chip" data-category="analytics">Analytics</button>
+          <button class="chip" data-category="marketing">Marketing</button>
+          <button class="chip" data-category="unknown">Unknown</button>
+        </div>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Category</th>
+              <th>Vendor</th>
+              <th>Domain</th>
+              <th>Party</th>
+              <th>Type</th>
+              <th class="num">Lifetime</th>
+              <th>Flags</th>
+            </tr>
+          </thead>
+          <tbody id="cookies-tbody"></tbody>
+        </table>
+      </div>
+
+      <p class="empty-state" id="cookies-empty" hidden>
+        No cookies match the current filter.
+      </p>
+    </div>
+  </section>
+
+  <!-- ================================================================== -->
+  <!-- VIEW 3: AUDIT REPORT                                                -->
+  <!-- ================================================================== -->
+  <section class="view" id="view-report">
+
+    <div class="card">
+      <div class="card-head">
+        <h2>Audit report</h2>
+        <select id="report-domain-select" class="input"></select>
+      </div>
+
+      <!-- Score summary -->
+      <div class="report-head" id="report-summary"></div>
+    </div>
+
+    <!--
+      CHART GRID.
+      Each <svg> is an empty canvas; D3 draws into it at runtime.
+
+      WHY SVG RATHER THAN <canvas> OR <img>:
+        • SVG is vector — sharp at any zoom, and crisp in screenshots
+        • Every shape is a real DOM element, so it can be styled with CSS,
+          inspected in DevTools, and given event listeners for tooltips
+        • <canvas> is just pixels: faster for thousands of points, but you
+          can't click a specific bar without doing the maths yourself
+
+      With at most a few dozen data points, SVG is clearly the right choice.
+    -->
+    <div class="chart-grid">
+      <div class="card chart-card">
+        <h3>Cookie categories</h3>
+        <p class="muted small">Latest scan. Hover a segment for detail.</p>
+        <svg id="chart-donut" class="chart"></svg>
+        <div class="legend" id="donut-legend"></div>
+      </div>
+
+      <div class="card chart-card">
+        <h3>Top vendors</h3>
+        <p class="muted small">Across all scans of this domain.</p>
+        <svg id="chart-vendors" class="chart"></svg>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Compliance score over time</h3>
+      <p class="muted small">
+        Higher is better. Scans capture the state <em>before</em> consent.
+      </p>
+      <svg id="chart-history" class="chart chart-wide"></svg>
+      <p class="empty-state" id="history-empty" hidden>
+        Only one scan so far — scan this domain again to see a trend.
+      </p>
+    </div>
+
+    <div class="card" id="unknowns-card">
+      <h3>Cookies needing manual review</h3>
+      <p class="muted small">
+        No signature matched these. They are reported as <em>unknown</em> rather
+        than assumed safe — a compliance tool that guesses "necessary" would
+        under-report risk.
+      </p>
+      <div class="table-wrap">
+        <table class="data-table">
+          <thead>
+            <tr><th>Name</th><th>Domain</th><th>Party</th></tr>
+          </thead>
+          <tbody id="unknowns-tbody"></tbody>
+        </table>
+      </div>
+      <p class="empty-state" id="unknowns-empty" hidden>
+        Every cookie on this domain was identified.
+      </p>
+    </div>
+  </section>
+
+</main>
+
+<!-- Tooltip element, moved and filled by the D3 charts on hover. -->
+<div class="tooltip" id="tooltip" hidden></div>
+
+<footer class="site-footer">
+  <p>
+    CookieGuard — automated classification is a technical aid,
+    <strong>not legal advice</strong>.
+  </p>
+</footer>
+
+</body>
+</html>
