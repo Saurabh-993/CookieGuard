@@ -16,7 +16,7 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
 
-from consent_diff import diff_consent, mark_post_consent_cookies, _cookie_key
+from consent_diff import _cookie_key, diff_consent, mark_post_consent_cookies
 
 
 def cookie(name, category="marketing", domain=".news.com",

@@ -65,7 +65,6 @@ from typing import List, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
-
 # ---------------------------------------------------------------------------
 # REQUEST MODELS — what clients send us
 # ---------------------------------------------------------------------------
@@ -507,6 +506,11 @@ class HealthResponse(BaseModel):
     database: str = Field(description="'connected' or an error description")
     domains_tracked: int = 0
     scans_stored: int = 0
+    # Phase 6: which deployment am I actually looking at? Sounds trivial until
+    # the first time you spend twenty minutes debugging staging while reading
+    # production's logs. Deliberately just a NAME — never any config values,
+    # because a health endpoint is public and secrets leak this way.
+    environment: str = "development"
 
 
 class ErrorResponse(BaseModel):

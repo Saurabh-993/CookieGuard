@@ -25,8 +25,12 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
 
-from report_pdf import (  # noqa: E402
-    build_report_html, svg_bar_chart, svg_donut, esc, fmt_date,
+from report_pdf import (
+    build_report_html,
+    esc,
+    fmt_date,
+    svg_bar_chart,
+    svg_donut,
 )
 
 

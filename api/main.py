@@ -65,7 +65,8 @@ from pathlib import Path
 from typing import List
 from urllib.parse import urlparse
 
-from fastapi import FastAPI, HTTPException, Query, Response, Path as PathParam
+from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import Path as PathParam
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
@@ -73,10 +74,18 @@ from fastapi.staticfiles import StaticFiles
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
 
-import db                                          # noqa: E402
-from schemas import (                              # noqa: E402
-    ScanRequest, ScanCreatedResponse, ScanSummary, ScanDetail,
-    CookieOut, DomainSummary, DomainReport, HealthResponse, ErrorResponse,
+import config
+import db
+from schemas import (
+    CookieOut,
+    DomainReport,
+    DomainSummary,
+    ErrorResponse,
+    HealthResponse,
+    ScanCreatedResponse,
+    ScanDetail,
+    ScanRequest,
+    ScanSummary,
 )
 
 API_VERSION = "0.3.0"
@@ -106,6 +115,11 @@ async def lifespan(app: FastAPI):
     explicit, and guarantees cleanup runs even if startup raised. It's the same
     reasoning as `async with` in scan.py — see TEACHING.md §14.)
     """
+    # Phase 6: print the effective configuration on boot. Nearly every
+    # "works locally, broken in the container" bug is a config value that
+    # isn't what someone assumed — four lines of log output beats an hour
+    # of guessing.
+    config.print_config()
     db.init_db()
     yield
     # Nothing to tear down yet. When we add a connection pool or a background
@@ -163,15 +177,28 @@ app = FastAPI(
 # CORS is the API's way of saying that. The server sends an
 # `Access-Control-Allow-Origin` header, and the browser then permits the read.
 #
-# ⚠ SECURITY NOTE — allow_origins=["*"] means ANY website may call this API.
-# That is fine here because the API is local, read-mostly and holds no
-# personal data or authentication. It would NOT be acceptable for an
-# authenticated production API: combined with `allow_credentials=True` it is a
-# serious hole, and browsers actually refuse that specific combination.
-# Before deploying in Phase 7, replace "*" with the real dashboard origin.
+# ✅ RESOLVED IN PHASE 6 (this used to be `allow_origins=["*"]` with a TODO).
+#
+# The allow-list now comes from configuration, so the SAME code runs on your
+# laptop and in production with different origins:
+#
+#     laptop      CORS_ORIGINS unset  →  http://localhost:8000, http://127.0.0.1:8000
+#     production  CORS_ORIGINS=https://cookieguard.example
+#
+# WHY "*" WAS ACCEPTABLE BEFORE AND ISN'T NOW
+# -------------------------------------------
+# "*" means any website on the internet may make requests to this API from a
+# visitor's browser. That was harmless while the API only ever listened on
+# localhost. Once it has a public address it is not, because POST /api/scan
+# spends real CPU driving a real browser — any page a user visits could make
+# their browser tell our server to go and scan things.
+#
+# `allow_credentials` stays False. Combined with "*" it is a serious hole, and
+# browsers refuse the combination outright — but we don't use cookies for auth
+# at all, so False is simply correct rather than a workaround.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],       # TODO(Phase 7): restrict to the dashboard origin
+    allow_origins=["*"] if config.CORS_ALLOW_ALL else config.CORS_ORIGINS,
     allow_credentials=False,   # deliberately False — see the note above
     allow_methods=["*"],
     allow_headers=["*"],
@@ -459,12 +486,14 @@ def health():
         return HealthResponse(
             status="ok", version=API_VERSION, database="connected",
             domains_tracked=len(domains), scans_stored=scans,
+            environment=config.ENVIRONMENT,
         )
     except Exception as e:
         # Report the failure honestly rather than pretending to be healthy.
         return HealthResponse(
             status="degraded", version=API_VERSION,
             database=f"error: {type(e).__name__}",
+            environment=config.ENVIRONMENT,
         )
 
 
@@ -537,12 +566,17 @@ async def create_scan(request: ScanRequest):
     # works, on a machine where Playwright isn't installed. Only this one
     # endpoint fails, and with a clear message.
     try:
-        import scan  # noqa: F401
+        import scan  # imported purely to prove Playwright is installed
     except ImportError as e:
+        # `from e` CHAINS the exceptions. Without it Python prints "During
+        # handling of the above exception, another exception occurred" and the
+        # original cause is technically still there but reads as unrelated
+        # noise. With it, the traceback says "this was DIRECTLY caused by" and
+        # names the real problem. One keyword, much better 3am debugging.
         raise HTTPException(
             status_code=503,
             detail=f"Scanner unavailable: {e}. Run: playwright install chromium",
-        )
+        ) from e
 
     try:
         # `asyncio.to_thread` runs a blocking function in a worker thread and
@@ -560,7 +594,7 @@ async def create_scan(request: ScanRequest):
         raise HTTPException(
             status_code=504,
             detail=f"Scan failed: {type(e).__name__}: {e}",
-        )
+        ) from e
 
     # Classify. `save_scan` would do this too, but we need the classified data
     # even when save=False.
@@ -828,7 +862,7 @@ async def domain_report_pdf(domain: str = PathParam(..., description="e.g. bbc.c
             status_code=503,
             detail=(f"PDF generation failed: {type(e).__name__}: {e}. "
                     "Is Chromium installed? Run: playwright install chromium"),
-        )
+        ) from e
 
     # A safe filename: strip anything that isn't alphanumeric, dot, dash or
     # underscore. A domain can't normally contain path separators, but building

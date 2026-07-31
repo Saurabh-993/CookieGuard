@@ -41,16 +41,15 @@ import pytest
 # otherwise find the module.
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
 
-from classifier import (  # noqa: E402  (import after path setup, deliberately)
-    classify_cookie,
-    classify_scan,
-    calculate_compliance_score,
-    load_trackers,
-    sorted_domain_signatures,
+from classifier import (
     _domain_matches,
     _registrable_domain,
+    calculate_compliance_score,
+    classify_cookie,
+    classify_scan,
+    load_trackers,
+    sorted_domain_signatures,
 )
-
 
 # ---------------------------------------------------------------------------
 # FIXTURES
@@ -465,6 +464,73 @@ def test_classify_scan_end_to_end(trackers):
     # A compliance block exists and is sane.
     assert 0 <= result["compliance"]["score"] <= 100
     assert result["compliance"]["cookies_requiring_consent"] == 3
+
+
+def test_domains_added_after_consent_are_detected(trackers):
+    """
+    REGRESSION TEST for a bug a LINTER found, not a human and not a test.
+
+    Ruff flagged `post_requests_start` in scan.py as an unused variable (F841).
+    That sounds cosmetic. It wasn't: the variable was the marker separating
+    pre-consent requests from post-consent ones, and without it classify_scan
+    was handing `diff_consent` the SAME domain list twice — as both "before"
+    and "after". The set difference of a list with itself is always empty, so
+    "new domains contacted after consent" reported 0 every time, on every site,
+    unconditionally.
+
+    Nothing crashed. The dashboard showed a number. The number could not
+    possibly have been right.
+
+    That's the lesson worth keeping: a plausible-looking zero is much harder to
+    notice than a crash. When a metric CAN only ever be one value, no test that
+    merely checks "is it a number" will ever catch it.
+    """
+    scan = {
+        "url": "https://example.com",
+        "domain": "example.com",
+        "cookie_count": 0,
+        "cookies": [],
+        # Everything contacted across the whole scan…
+        "third_party_domains": [
+            {"domain": "cdn.example.com", "request_count": 4},
+            {"domain": "doubleclick.net", "request_count": 11},
+        ],
+        # …versus only what was contacted BEFORE the consent click.
+        "pre_consent_third_party_domains": [
+            {"domain": "cdn.example.com", "request_count": 4},
+        ],
+        # A post-consent pass happened, so the diff block is computed.
+        "post_consent_cookies": [],
+    }
+
+    result = classify_scan(scan, trackers)
+    added = [d["domain"] for d in result["consent_diff"]["domains_added"]]
+
+    assert added == ["doubleclick.net"], (
+        "the ad domain appeared only after consent and must be reported"
+    )
+    assert "cdn.example.com" not in added, "already contacted before consent"
+
+
+def test_domains_added_falls_back_for_older_scan_files(trackers):
+    """
+    Saved scan JSON written before Phase 6 has no `pre_consent_third_party_domains`
+    key. Those files must still load — reporting no added domains, which is the
+    honest answer for evidence we never captured, rather than crashing or
+    inventing one.
+    """
+    scan = {
+        "url": "https://example.com",
+        "domain": "example.com",
+        "cookie_count": 0,
+        "cookies": [],
+        "third_party_domains": [{"domain": "doubleclick.net", "request_count": 11}],
+        "post_consent_cookies": [],
+        # note: no pre_consent_third_party_domains
+    }
+
+    result = classify_scan(scan, trackers)
+    assert result["consent_diff"]["domains_added"] == []
 
 
 def test_classify_scan_does_not_mutate_input(trackers):

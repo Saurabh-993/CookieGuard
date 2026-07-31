@@ -35,12 +35,11 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi import HTTPException
+from fastapi.testclient import TestClient
+from main import app, validate_scan_url
 
-import db  # noqa: E402
-from main import app, validate_scan_url  # noqa: E402
-from fastapi import HTTPException  # noqa: E402
-
+import db
 
 # ---------------------------------------------------------------------------
 # FIXTURES
@@ -660,16 +659,46 @@ def test_response_model_strips_undeclared_fields(client, mock_scanner):
 # 8. CORS
 # ---------------------------------------------------------------------------
 
-def test_cors_header_is_present(client):
+# These tests were REWRITTEN in Phase 6, and the rewrite is the interesting
+# part. They used to assert `== "*"`, i.e. "any website may call this API".
+# That passed, and it was asserting the presence of the security hole.
+#
+# A test locks in behaviour. So when you deliberately tighten behaviour, the
+# old test SHOULD fail — that failure is the test doing its job, telling you a
+# contract changed. The mistake would have been to loosen the config until the
+# test went green again.
+
+def test_cors_allows_a_configured_origin(client):
     """
-    Without this header the browser blocks the dashboard's fetch() calls,
-    because a file:// page or a different port is a different ORIGIN.
+    An origin on the allow-list gets the header back, so the browser permits
+    the dashboard's fetch() calls.
+
+    config.py's default list is localhost:8000 / 127.0.0.1:8000 — the origins
+    this API serves the dashboard from.
     """
-    r = client.get("/api/domains", headers={"Origin": "http://localhost:3000"})
-    assert r.headers.get("access-control-allow-origin") == "*"
+    r = client.get("/api/domains", headers={"Origin": "http://localhost:8000"})
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:8000"
 
 
-def test_cors_preflight_is_answered(client):
+def test_cors_rejects_an_unknown_origin(client):
+    """
+    THE TEST THAT ACTUALLY MATTERS — and the one that couldn't exist while the
+    config said "*".
+
+    Note WHAT is being asserted: not that the request fails, but that the
+    header is ABSENT. CORS is enforced by the browser, not the server; the
+    response body still comes back. Omitting the header is precisely how a
+    server says "no", and the browser then refuses to let the page read it.
+
+    Worth knowing for interviews: CORS is not a server-side access control.
+    `curl` ignores it entirely. It protects users from other websites, not
+    APIs from attackers — anything that needs real protection needs auth.
+    """
+    r = client.get("/api/domains", headers={"Origin": "https://evil.example"})
+    assert "access-control-allow-origin" not in r.headers
+
+
+def test_cors_preflight_is_answered_for_allowed_origin(client):
     """
     Before certain cross-origin requests the browser sends an OPTIONS
     "preflight" asking permission. If the API doesn't answer it, the real
@@ -678,12 +707,22 @@ def test_cors_preflight_is_answered(client):
     r = client.options(
         "/api/scan",
         headers={
-            "Origin": "http://localhost:3000",
+            "Origin": "http://localhost:8000",
             "Access-Control-Request-Method": "POST",
         },
     )
     assert r.status_code in (200, 204)
-    assert "access-control-allow-origin" in r.headers
+    assert r.headers.get("access-control-allow-origin") == "http://localhost:8000"
+
+
+def test_cors_never_allows_credentials(client):
+    """
+    `allow_credentials=True` would let other sites make requests carrying the
+    user's cookies. We don't authenticate with cookies at all, so this must
+    stay off — and a test is cheaper than remembering.
+    """
+    r = client.get("/api/domains", headers={"Origin": "http://localhost:8000"})
+    assert r.headers.get("access-control-allow-credentials") != "true"
 
 
 # ---------------------------------------------------------------------------

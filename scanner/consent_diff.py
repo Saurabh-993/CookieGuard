@@ -37,6 +37,9 @@ though a very interesting kind.
 """
 
 
+from typing import Optional
+
+
 def _cookie_key(cookie: dict) -> tuple:
     """
     A stable identity for a cookie, used to tell "the same cookie" from
@@ -59,7 +62,8 @@ def _cookie_key(cookie: dict) -> tuple:
 
 
 def diff_consent(pre_cookies: list, post_cookies: list,
-                 pre_domains: list = None, post_domains: list = None) -> dict:
+                 pre_domains: Optional[list] = None,
+                 post_domains: Optional[list] = None) -> dict:
     """
     Compare two classified cookie lists and summarise what consent changed.
 

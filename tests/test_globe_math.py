@@ -111,9 +111,9 @@ def test_cartesian_known_points():
         north_pole: versor.cartesian([0, 90]),
       }));
     """)
-    assert all(abs(a - b) < 1e-9 for a, b in zip(out["origin"], [1, 0, 0]))
-    assert all(abs(a - b) < 1e-9 for a, b in zip(out["east"], [0, 1, 0]))
-    assert all(abs(a - b) < 1e-9 for a, b in zip(out["north_pole"], [0, 0, 1]))
+    assert all(abs(a - b) < 1e-9 for a, b in zip(out["origin"], [1, 0, 0], strict=True))
+    assert all(abs(a - b) < 1e-9 for a, b in zip(out["east"], [0, 1, 0], strict=True))
+    assert all(abs(a - b) < 1e-9 for a, b in zip(out["north_pole"], [0, 0, 1], strict=True))
 
 
 # ---------------------------------------------------------------------------

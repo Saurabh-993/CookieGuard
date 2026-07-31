@@ -48,7 +48,6 @@ identically every time, offline, in about a second.
 import html
 from datetime import datetime, timezone
 
-
 # ---------------------------------------------------------------------------
 # SMALL HELPERS
 # ---------------------------------------------------------------------------
@@ -468,8 +467,14 @@ def render_pdf_sync(html_text: str) -> bytes:
     """
     from playwright.sync_api import sync_playwright
 
+    # Phase 6: same container flags as the scanner. Reuse the scanner's helper
+    # rather than duplicating the logic — one definition of "how do we launch
+    # Chromium here" means the container fix can't be applied to one call site
+    # and forgotten at the other.
+    from scan import browser_launch_args
+
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=browser_launch_args())
         try:
             page = browser.new_page()
             page.set_content(html_text, wait_until="load")

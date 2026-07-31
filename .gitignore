@@ -21,5 +21,17 @@ data/*.json
 Thumbs.db
 
 # Environment secrets
+# ⚠ `.env` is ignored; `.env.example` is NOT — that asymmetry is deliberate.
+# The example documents which variables exist, with safe placeholder values,
+# so a new contributor knows what to fill in. The real file never leaves the
+# machine it was written on.
 .env
+.env.local
+.env.*.local
+!.env.example
+
+# Personal teaching notes — kept locally, not published
 docs/*.md
+
+# Linter / formatter caches
+.ruff_cache/

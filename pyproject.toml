@@ -1,0 +1,146 @@
+# =============================================================================
+# CookieGuard — tool configuration
+# =============================================================================
+#
+# WHAT pyproject.toml IS
+# ----------------------
+# The standard place for Python tooling configuration (PEP 518/621). Before it
+# existed, every tool had its own file: .flake8, setup.cfg, pytest.ini,
+# .isort.cfg, mypy.ini. One file, one format, is strictly better.
+#
+# We are NOT declaring a package here (no [project] table with a name and
+# version) because CookieGuard is an application you run, not a library you
+# `pip install`. Adding packaging metadata we don't need would be cargo-culting.
+# =============================================================================
+
+
+# =============================================================================
+# RUFF — linting
+# =============================================================================
+# A linter reads code without running it and reports likely mistakes. That
+# "without running it" is the point: it catches the branch your tests never
+# took. Ruff is written in Rust and checks this whole repository in well under
+# a second, which is why it runs on every commit rather than "sometimes".
+#
+# THE RULE SELECTION BELOW IS THE INTERESTING PART.
+# A linter with too many rules gets switched off. The failure mode is real: 200
+# warnings about type-annotation style buries the one that says a variable is
+# never used, everyone learns to ignore the output, and the tool is now worse
+# than nothing because it provides false assurance.
+#
+# So this config chooses a small set of rules that find BUGS, and deliberately
+# leaves out the ones that only express taste. That choice already paid for
+# itself once — F841 (unused variable) found a genuinely broken feature in
+# scan.py that every test had been passing over. See the note there.
+[tool.ruff]
+line-length = 100
+
+# Ruff's default. Listed explicitly because the default has changed between
+# versions, and a linter that quietly starts checking different files is a
+# confusing morning.
+target-version = "py311"
+
+exclude = [
+    ".git",
+    ".venv",
+    "__pycache__",
+    "data",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",     # pycodestyle errors — genuine syntax-adjacent problems
+    "F",     # Pyflakes — THE important one: unused names, undefined names,
+             #            unused imports, shadowed variables. Real bugs.
+    "W",     # pycodestyle warnings — trailing whitespace and friends
+    "I",     # isort — import ordering. Not a bug, but it makes diffs smaller
+             #         by removing an entire category of pointless conflict.
+    "B",     # flake8-bugbear — mutable default arguments, loop-variable
+             #         capture in closures. Exactly the Python traps that bit
+             #         us in Phase 2b (the late-binding DEFAULT_DB_PATH bug).
+    "C4",    # comprehension simplifications — list(x for x in y) → [x for x in y]
+    "RUF",   # Ruff's own rules
+]
+
+ignore = [
+    # ---- Line length -------------------------------------------------------
+    # E501 is off ON PURPOSE, and this is a deliberate project decision rather
+    # than laziness. CookieGuard is a teaching codebase: the comment blocks are
+    # the deliverable. Hard-wrapping a paragraph to satisfy a linter makes it
+    # harder to read and produces noisier diffs when it's edited.
+    "E501",
+
+    # ---- Module-level imports not at top of file ---------------------------
+    # api/main.py and the tests must call sys.path.insert() BEFORE importing
+    # our own modules, because the packages live in sibling directories. The
+    # import genuinely cannot come first. Suppressing it globally beats
+    # sprinkling `# noqa: E402` on a dozen lines.
+    "E402",
+
+    # ---- Ambiguous variable names ------------------------------------------
+    # E741 objects to `l`, `I`, `O`. Reasonable in general; we use `l` for
+    # longitude in the globe maths, where it is the conventional symbol and
+    # renaming it would make the code harder to check against the reference.
+    "E741",
+
+    # ---- Ambiguous Unicode characters --------------------------------------
+    # RUF002/RUF003 warn when a comment or docstring contains a character that
+    # LOOKS like ASCII but isn't — a Cyrillic 'а' in an identifier is a real
+    # supply-chain attack. But the rule can't tell that from deliberate
+    # typography, and this codebase uses — · → ✅ ⚠ throughout its explanations
+    # on purpose. Suppressed for prose only; the rule still applies to code,
+    # where it matters.
+    "RUF002",
+    "RUF003",
+
+    # ---- list + [x] versus [*list, x] --------------------------------------
+    # RUF005 prefers unpacking. Marginally faster, and genuinely less readable
+    # for anyone who hasn't met the syntax. This is a teaching codebase, so
+    # clarity wins over a nanosecond.
+    "RUF005",
+
+    # ---- zip() without strict= ---------------------------------------------
+    # A good rule: `strict=True` catches silently comparing only the shorter
+    # of two sequences. Applied where it adds a real check (test_globe_math);
+    # ignored globally because the remaining sites zip a list with a literal
+    # of obviously matching length, where it is noise.
+    "B905",
+
+    # ---- Assert usage in tests ---------------------------------------------
+    # "S" (bandit) is not selected above. Noted here so nobody adds it without
+    # realising it will flag every assert in the test suite.
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests import fixtures and helpers that a linter can't see are used, and
+# redefinition is normal in a fixture-heavy module.
+"tests/*" = ["F401", "F811"]
+
+# api/main.py imports `scan` inside a try/except purely to check that Playwright
+# is installed, so the API can return a clear 503 instead of crashing. The
+# import genuinely IS the test — F401 is right in general and wrong here.
+"api/main.py" = ["F401"]
+
+[tool.ruff.lint.isort]
+# Tell isort that these are OUR modules, not third-party ones. Without this it
+# sorts `import db` in with `import fastapi`, and every diff argues about it.
+known-first-party = ["api", "scanner", "db", "config", "schemas", "classifier"]
+
+
+# =============================================================================
+# PYTEST
+# =============================================================================
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+# --strict-markers turns a MISSPELLED marker into an error.
+# Without it, `@pytest.mark.slwo` (typo) is silently accepted and does nothing,
+# so `-m "not slow"` quietly runs a test you meant to exclude — or worse, `-m
+# slow` runs nothing and reports success. Losing tests silently is the worst
+# possible failure mode for a test suite.
+addopts = "--strict-markers --strict-config"
+
+markers = [
+    "integration: needs a real browser or network access (deselect with '-m \"not integration\"')",
+]

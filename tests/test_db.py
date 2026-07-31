@@ -24,19 +24,18 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "api"))
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
 
-from db import (  # noqa: E402
-    init_db,
+from db import (
+    delete_scan,
     get_connection,
-    save_scan,
+    get_domain_report,
+    get_latest_scan,
+    get_or_create_domain,
     get_scan,
     get_scans_for_domain,
-    get_latest_scan,
-    get_domain_report,
+    init_db,
     list_domains,
-    delete_scan,
-    get_or_create_domain,
+    save_scan,
 )
-
 
 # ---------------------------------------------------------------------------
 # FIXTURES

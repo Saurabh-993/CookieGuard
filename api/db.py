@@ -52,7 +52,7 @@ RUN IT LIKE THIS
 import argparse
 import json
 import os
-import sqlite3          # the SQLite driver, built into Python
+import sqlite3  # the SQLite driver, built into Python
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -60,9 +60,9 @@ from pathlib import Path
 # Make scanner/ importable so we can classify a raw scan before saving it.
 # `__file__` is this file; .parent is api/; .parent.parent is the project root.
 sys.path.insert(0, str(Path(__file__).parent.parent / "scanner"))
-from classifier import classify_scan, load_trackers  # noqa: E402
-from jurisdictions import summarise_data_flows       # noqa: E402
+from jurisdictions import summarise_data_flows
 
+from classifier import classify_scan, load_trackers
 
 # ---------------------------------------------------------------------------
 # CONFIGURATION
@@ -1206,7 +1206,7 @@ def print_report(report: dict) -> None:
     print(f"  Total scans  : {st['total_scans']}")
 
     if latest:
-        print(f"\n  LATEST RESULT")
+        print("\n  LATEST RESULT")
         print(f"  {sub}")
         print(f"  Score  : {latest['compliance_score']}/100   Grade: {latest['compliance_grade']}")
         print(f"  Cookies: {latest['cookie_count']}  "
@@ -1219,18 +1219,18 @@ def print_report(report: dict) -> None:
               f"{latest['cookies_requiring_consent']}")
 
     if st["total_scans"] and st["avg_score"] is not None:
-        print(f"\n  ACROSS ALL SCANS")
+        print("\n  ACROSS ALL SCANS")
         print(f"  {sub}")
         print(f"  Average score : {st['avg_score']:.1f}")
         print(f"  Best / worst  : {st['best_score']} / {st['worst_score']}")
         print(f"  Trend         : {report['trend'].upper()}")
 
     if report["top_vendors"]:
-        print(f"\n  MOST FREQUENT VENDORS")
+        print("\n  MOST FREQUENT VENDORS")
         print(f"  {sub}")
         print(f"  {'VENDOR':<34}{'CATEGORY':<14}{'COOKIES':>9}{'IN SCANS':>10}")
         for v in report["top_vendors"][:10]:
-            print(f"  {str(v['vendor'])[:33]:<34}{str(v['category']):<14}"
+            print(f"  {str(v['vendor'])[:33]:<34}{v['category']!s:<14}"
                   f"{v['occurrences']:>9}{v['scans_seen_in']:>10}")
 
     if report["unknown_cookies"]:
@@ -1240,7 +1240,7 @@ def print_report(report: dict) -> None:
             print(f"    {c['name'][:44]:<46}{c['domain'][:24]:<26}{c['party']}")
 
     if len(report["history"]) > 1:
-        print(f"\n  SCORE HISTORY")
+        print("\n  SCORE HISTORY")
         print(f"  {sub}")
         for h in report["history"]:
             score = h["compliance_score"] or 0
@@ -1248,7 +1248,7 @@ def print_report(report: dict) -> None:
             when = (h["scanned_at"] or "")[:10]
             print(f"  {when}  {score:>3}  {bar}")
 
-    print(f"\n  NOTE: automated classification is a technical aid, not legal advice.")
+    print("\n  NOTE: automated classification is a technical aid, not legal advice.")
     print(f"{line}\n")
 
 
@@ -1333,7 +1333,7 @@ def main() -> int:
         print(f"  {'NAME':<28}{'CATEGORY':<12}{'VENDOR':<28}{'PARTY'}")
         print(f"  {'-' * 74}")
         for c in scan["cookies"]:
-            print(f"  {str(c['name'])[:27]:<28}{str(c['category']):<12}"
+            print(f"  {str(c['name'])[:27]:<28}{c['category']!s:<12}"
                   f"{str(c['vendor'])[:27]:<28}{c['party']}")
         print()
         return 0

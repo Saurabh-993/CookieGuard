@@ -1,0 +1,95 @@
+# =============================================================================
+# .dockerignore — what `COPY` is not allowed to see
+# =============================================================================
+#
+# THIS IS NOT .gitignore, AND THE DIFFERENCE MATTERS
+# --------------------------------------------------
+# .gitignore keeps files out of version control.
+# .dockerignore keeps files out of the BUILD CONTEXT — the tarball your machine
+# uploads to the Docker daemon before the first instruction even runs.
+#
+# Without this file, `docker build .` on this project would ship .git, .venv,
+# node_modules, the local database and every scan JSON to the daemon. That is
+# hundreds of megabytes copied on EVERY build, before anything is cached.
+#
+# Three reasons it matters, in increasing order of importance:
+#
+#   1. SPEED     — the context is uploaded in full every single build.
+#   2. CACHING   — `COPY . .` hashes the context. If .venv is included, a
+#                  stray .pyc changes the hash and busts every later layer.
+#   3. SECRETS   — anything copied in is inside the image FOREVER, in a layer.
+#                  Deleting it in a later RUN does not remove it; the layer is
+#                  still there and `docker history` will show it. A .env copied
+#                  in by accident is a published credential.
+#
+# Rule of thumb: deny broadly, then allow back what you actually need.
+# =============================================================================
+
+# --- Version control ---------------------------------------------------------
+# .git can be larger than the whole application, and carries every version of
+# every file ever committed — including anything you later removed.
+.git
+.gitignore
+.github
+
+# --- Python artefacts --------------------------------------------------------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# --- Virtual environments ----------------------------------------------------
+# ⚠ Critically important. A .venv holds platform-specific compiled binaries
+# built for YOUR machine. Copied into a Linux image they are at best dead
+# weight and at worst shadow the correctly-installed packages, producing
+# import errors that make no sense.
+.venv/
+venv/
+env/
+
+# --- Local state and real data ----------------------------------------------
+# The database and scan outputs are RUNTIME state. Baking them into the image
+# means every deployment resets to a snapshot of your laptop, and anyone who
+# pulls the image gets your scan history. State belongs in a volume.
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# --- Secrets -----------------------------------------------------------------
+# .env holds real values. .env.example is placeholders and IS committed — but
+# neither is needed in the image, because config comes from the environment at
+# run time, not from a file baked in at build time.
+.env
+.env.*
+
+# --- Documentation and tests -------------------------------------------------
+# Excluded to keep the image small and the attack surface minimal. Tests run in
+# CI against the source tree, not inside the shipped image.
+#
+# (There is a school of thought that says ship the tests so you can run them
+# against the real artifact. Reasonable, and if you adopt it, delete the
+# `tests/` line rather than working around it.)
+docs/
+tests/
+*.md
+!README.md
+
+# --- Editor and OS noise -----------------------------------------------------
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# --- Node (the frontend has no build step today, but this is cheap insurance) -
+node_modules/
+npm-debug.log
+
+# --- Docker's own files ------------------------------------------------------
+# The Dockerfile does not need to be inside the image it builds.
+Dockerfile
+.dockerignore
+docker-compose*.yml

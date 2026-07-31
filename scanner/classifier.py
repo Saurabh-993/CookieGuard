@@ -45,13 +45,14 @@ import json
 import re  # regular expressions — pattern matching for text
 import sys
 from pathlib import Path
+from typing import Optional
 
 # Make this file importable both as `python scanner/classifier.py` and as
 # `from classifier import ...` by another package (api/db.py does this).
 # Adding our own folder to sys.path means `import domains` resolves either way.
 sys.path.insert(0, str(Path(__file__).parent))
 
-from domains import registrable_domain  # noqa: E402  (after path setup)
+from domains import registrable_domain
 
 # ---------------------------------------------------------------------------
 # CONSTANTS
@@ -364,7 +365,7 @@ def calculate_compliance_score(cookies: list) -> dict:
     `cookies_requiring_consent` count — that number is either zero or it isn't.
     """
     # Count how many cookies fall into each category.
-    counts = {c: 0 for c in CATEGORIES}
+    counts = dict.fromkeys(CATEGORIES, 0)
     for c in cookies:
         cat = c.get("category", "unknown")
         counts[cat] = counts.get(cat, 0) + 1
@@ -448,7 +449,7 @@ def calculate_compliance_score(cookies: list) -> dict:
 # CLASSIFYING A WHOLE SCAN
 # ---------------------------------------------------------------------------
 
-def classify_scan(scan_result: dict, trackers: dict = None) -> dict:
+def classify_scan(scan_result: dict, trackers: Optional[dict] = None) -> dict:
     """
     Take a full scan result from scan.py and return an enriched copy.
 
@@ -481,7 +482,7 @@ def classify_scan(scan_result: dict, trackers: dict = None) -> dict:
     result["cookies"] = classified_cookies
 
     # Count per category.
-    counts = {c: 0 for c in CATEGORIES}
+    counts = dict.fromkeys(CATEGORIES, 0)
     for c in classified_cookies:
         counts[c["category"]] = counts.get(c["category"], 0) + 1
     result["categories"] = counts
@@ -528,7 +529,13 @@ def classify_scan(scan_result: dict, trackers: dict = None) -> dict:
         result["consent_diff"] = diff_consent(
             pre_cookies=classified_cookies,
             post_cookies=classified_post,
-            pre_domains=scan_result.get("third_party_domains"),
+            # ⚠ These two were the SAME key until Phase 6, so "domains added
+            # after consent" was always empty — see the note in scan.py.
+            # The `or` fallback keeps older saved scan JSON working: files
+            # written before this field existed simply report no new domains,
+            # which is the honest answer for data we never captured.
+            pre_domains=(scan_result.get("pre_consent_third_party_domains")
+                         or scan_result.get("third_party_domains")),
             post_domains=scan_result.get("third_party_domains"),
         )
 
@@ -545,7 +552,7 @@ def classify_scan(scan_result: dict, trackers: dict = None) -> dict:
 
         # Recount categories over the full post-consent set, so the dashboard
         # charts show the complete picture rather than only the pre-consent half.
-        counts = {c: 0 for c in CATEGORIES}
+        counts = dict.fromkeys(CATEGORIES, 0)
         for c in result["cookies"]:
             counts[c["category"]] = counts.get(c["category"], 0) + 1
         result["categories"] = counts
@@ -598,12 +605,12 @@ def print_classified_report(result: dict) -> None:
           f"{comp['cookies_requiring_consent']}")
 
     if comp["deductions"]:
-        print(f"\n  Points deducted for:")
+        print("\n  Points deducted for:")
         for d in comp["deductions"]:
             print(f"    {d['points']:>4}  {d['reason']} (x{d['count']})")
 
     # --- Category breakdown ---
-    print(f"\n  CATEGORY BREAKDOWN")
+    print("\n  CATEGORY BREAKDOWN")
     print(f"  {sub}")
     for cat in CATEGORIES:
         n = result["categories"].get(cat, 0)
@@ -617,7 +624,7 @@ def print_classified_report(result: dict) -> None:
             print(f"       {' ' * 12}     ({consent})")
 
     # --- Cookie table ---
-    print(f"\n  COOKIE INVENTORY")
+    print("\n  COOKIE INVENTORY")
     print(f"  {sub}")
     if result["cookies"]:
         print(f"  {'NAME':<24}{'CATEGORY':<12}{'VENDOR':<24}{'PARTY':<7}{'MATCHED BY'}")
@@ -658,7 +665,7 @@ def print_classified_report(result: dict) -> None:
         print("\n  These matched no signature. Look them up and, if you identify")
         print("  them, add an entry to scanner/trackers.json.")
 
-    print(f"\n  NOTE: automated classification is a technical aid, not legal advice.")
+    print("\n  NOTE: automated classification is a technical aid, not legal advice.")
     print(f"{line}\n")
 
 

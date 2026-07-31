@@ -18,6 +18,8 @@ In short: **a simplified, open-source version of what OneTrust does.**
 - [Folder Structure](#-folder-structure)
 - [Setup & Installation](#-setup--installation)
 - [How to Run](#-how-to-run)
+- [Run with Docker](#-run-with-docker)
+- [Continuous Integration](#-continuous-integration)
 - [API Documentation](#-api-documentation)
 - [Screenshots](#-screenshots)
 - [Build Phases](#-build-phases)
@@ -440,11 +442,98 @@ Sample report:
   2026-08-14   33  #############
 ```
 
+## 🐳 Run with Docker
+
+Phase 6 — **available now.** One command, and you don't need Python,
+Playwright or Chromium installed at all.
+
+```bash
+docker compose up --build
+```
+
+Then open **http://127.0.0.1:8000/dashboard/**.
+
+```bash
+docker compose logs -f      # follow the logs
+docker compose down         # stop (your data survives)
+docker compose down -v      # stop AND DELETE the database volume
+```
+
+### What the setup does, and why
+
+| Choice | Reason |
+|---|---|
+| `FROM mcr.microsoft.com/playwright/python` | Chromium plus its ~30 Linux libraries, preinstalled and version-matched. Installing them by hand is 40 lines of `apt-get` and fails with errors naming missing *symbols*. |
+| Dependencies copied **before** source | Docker caches layers. Reversed, every one-character code edit would reinstall Playwright and re-download a browser. |
+| Runs as non-root `pwuser` | Root in a container is close to root on the host. We drive a browser at untrusted URLs. |
+| Database in a `/data` **volume** | A container's filesystem is destroyed when the container is replaced — which happens on every deploy. A database inside the image vanishes silently. |
+| `cap_add: SYS_ADMIN`, **not** `--no-sandbox` | Grants the one capability Chromium's sandbox needs, rather than switching the sandbox off. We point this browser at URLs typed by strangers. |
+| `shm_size: 1gb` | Docker's default `/dev/shm` is 64MB; Chromium crashes above that. The symptom is `Target closed`, which reads like a Playwright bug. |
+| Port bound to `127.0.0.1` | `"8000:8000"` would publish to your whole network — on a cloud VM, the internet. Docker edits iptables directly and bypasses your firewall to do it. |
+
+### Configuration
+
+Every setting is an environment variable. Copy the template and edit:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Default | Notes |
+|---|---|---|
+| `COOKIEGUARD_DB` | `./data/cookieguard.db` | Must be `/data/...` in Docker |
+| `COOKIEGUARD_HOST` | `127.0.0.1` | Must be `0.0.0.0` in a container, or the port mapping silently receives nothing |
+| `CORS_ORIGINS` | `http://localhost:8000,http://127.0.0.1:8000` | Comma-separated. No trailing slashes |
+| `CORS_ALLOW_ALL` | `false` | Escape hatch. `CORS_ORIGINS=*` does **not** work |
+| `BROWSER_NO_SANDBOX` | `false` | Real security reduction — read the note in `scanner/scan.py` first |
+| `ENVIRONMENT` | `development` | Shown on `/health` |
+
+`python api/config.py` prints the effective configuration, and the app prints
+it on every startup.
+
+---
+
+## 🔄 Continuous Integration
+
+`.github/workflows/ci.yml` runs on every push and pull request to `main`.
+
+```
+   lint  ─┐
+          ├─►  docker: build + SMOKE TEST  ─►  publish to GHCR (main only)
+   test  ─┘
+   ~15s      ~2 min                             ~1 min
+   ~90s
+```
+
+| Job | What it does |
+|---|---|
+| **lint** | `ruff check .` — separate job so a syntax error tells you in 15 seconds, not 2 minutes |
+| **test** | Full pytest suite on Python **3.11 and 3.12** in parallel, `fail-fast: false` so you see both results at once |
+| **docker** | Builds the image, **starts the container**, and polls `/health` until it responds |
+| **publish** | Pushes to GitHub Container Registry, tagged `:latest` **and** `:<git-sha>` |
+
+**Why the smoke test matters.** A successful `docker build` proves the image
+was *assembled*. It proves nothing about whether the app *starts* — and that
+gap is where every container-shaped bug lives. It caught a real one here: the
+HEALTHCHECK pointed at `/api/health` when the route is `/health`, which would
+have made the container report unhealthy forever while working perfectly.
+
+**Deploy by SHA, not `:latest`.** `:latest` tells you nothing about what's
+running. The SHA tag identifies the exact commit, and rollback is `docker run`
+with an older one.
+
+---
+
 ### Run the tests
 
 ```bash
-pytest -v
+pytest -q          # 260 tests
+ruff check .       # linting
 ```
+
+Two test files run JavaScript from `frontend/` under **Node** — the globe's
+quaternion maths and the chart layout maths. They skip cleanly if Node isn't
+installed, but CI installs it so they actually run.
 
 ### Run the API (Phase 3 — available now)
 
@@ -663,8 +752,8 @@ Once the API exists, FastAPI will auto-generate live, testable documentation at
 | **3** | FastAPI REST endpoints | ✅ **Done** |
 | **4** | Dashboard (tables + charts + audit report) | ✅ **Done** |
 | **5** | Consent banner | ✅ **Done** |
-| **6** | Docker + GitHub Actions CI/CD | ⬜ Next |
-| **7** | AWS deployment | ⬜ Pending |
+| **6** | Docker + GitHub Actions CI/CD | ✅ **Done** |
+| **7** | AWS deployment | ⬜ Next |
 
 ---
 

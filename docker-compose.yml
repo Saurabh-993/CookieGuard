@@ -1,0 +1,144 @@
+# =============================================================================
+# CookieGuard — docker compose (Phase 6)
+# =============================================================================
+#
+# WHAT COMPOSE IS FOR
+# -------------------
+# A Dockerfile describes ONE image. Compose describes how to RUN it: which
+# ports, which volumes, which environment, what to do when it dies.
+#
+# Everything here could be a `docker run` command. That command would be:
+#
+#   docker run -d --name cookieguard -p 8000:8000 \
+#     -v cookieguard-data:/data \
+#     -e ENVIRONMENT=docker -e CORS_ORIGINS=http://localhost:8000 \
+#     --cap-add=SYS_ADMIN --shm-size=1g --memory=1g --restart=unless-stopped \
+#     cookieguard:latest
+#
+# That is the argument for this file in one line. Nobody types that correctly
+# twice, and nobody remembers in three months why --shm-size was there. The
+# real deliverable of compose is that run-time configuration becomes something
+# you can read, review and commit — not shell history on one person's laptop.
+#
+#   docker compose up -d      start
+#   docker compose logs -f    follow logs
+#   docker compose down       stop and remove (the VOLUME survives)
+# =============================================================================
+
+# NOTE: no `version:` key. It was required by Compose v1 and is obsolete in v2,
+# which warns about it. Old tutorials all still have it.
+
+services:
+  api:
+    # `build` = compile the image from source in this directory.
+    # `image`  = also tag the result, so `docker run cookieguard:latest` works
+    #            and CI can push the same name.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cookieguard:latest
+    container_name: cookieguard
+
+    # ---- Ports --------------------------------------------------------------
+    # "HOST:CONTAINER" — and the order catches everyone once.
+    #
+    # 127.0.0.1:8000:8000 binds to the LOOPBACK interface only, so the API is
+    # reachable from this machine and nothing else. Writing "8000:8000" binds
+    # to 0.0.0.0 and publishes it to your whole network — which on a cloud VM
+    # means the internet, and Docker punches through the firewall to do it.
+    # People have exposed databases this way without realising.
+    #
+    # Phase 7 puts this behind a reverse proxy, so loopback stays correct.
+    ports:
+      - "127.0.0.1:8000:8000"
+
+    # ---- Persistent state ---------------------------------------------------
+    # A container's filesystem dies with the container, and `compose up` after
+    # any change to this file creates a NEW container. Without this line, every
+    # configuration tweak would silently wipe the audit history.
+    #
+    # A NAMED VOLUME (not a bind mount) because Docker manages the location and
+    # permissions. A bind mount like `./data:/data` also works and is easier to
+    # inspect, but on Windows and macOS it goes through a filesystem translation
+    # layer that makes SQLite's locking unreliable — corruption, not slowness.
+    volumes:
+      - cookieguard-data:/data
+
+    # ---- Configuration ------------------------------------------------------
+    # `env_file` is optional here: if you have not created .env, compose still
+    # starts, because `required: false`. Without that flag a missing .env is a
+    # hard error, which is a poor first experience for someone who just cloned
+    # the repo.
+    env_file:
+      - path: .env
+        required: false
+
+    # These are defaults; anything in .env overrides them.
+    environment:
+      ENVIRONMENT: docker
+      COOKIEGUARD_HOST: 0.0.0.0          # see the Dockerfile note — 127.0.0.1
+                                          # here makes the port mapping useless
+      COOKIEGUARD_PORT: "8000"
+      COOKIEGUARD_DB: /data/cookieguard.db
+      CORS_ORIGINS: http://localhost:8000,http://127.0.0.1:8000
+
+      # NOTE we do NOT set BROWSER_NO_SANDBOX. See cap_add below — we keep
+      # Chromium's sandbox and grant the capability it needs instead.
+
+    # ---- Chromium's requirements --------------------------------------------
+    # SYS_ADMIN lets Chromium create the user namespaces its sandbox is built
+    # from. The lazy alternative is --no-sandbox, which turns the sandbox off
+    # entirely — and we point this browser at URLs typed by strangers, so the
+    # sandbox is the one thing standing between a malicious page and the
+    # container. Granting one capability to KEEP a security boundary is a
+    # better trade than removing the boundary to avoid granting it.
+    #
+    # (SYS_ADMIN is itself a broad capability — this is a real trade-off, not a
+    # free win. The genuinely correct answer is a custom seccomp profile; it is
+    # more setup than this project warrants, and worth naming as the next step
+    # if anyone asks.)
+    cap_add:
+      - SYS_ADMIN
+
+    # Chromium uses shared memory heavily for its renderer processes. Docker's
+    # default /dev/shm is 64MB, and Chromium crashes on media-heavy pages when
+    # it runs out — as "Target closed", which reads like a Playwright bug and
+    # sends you debugging the wrong file entirely.
+    shm_size: 1gb
+
+    # ---- Resource limits ----------------------------------------------------
+    # A scan is expensive: a full browser, ~40 seconds, hundreds of MB. Without
+    # a ceiling a runaway page can consume the host's memory, and the Linux OOM
+    # killer then picks a victim — often not the container that caused it.
+    # With a limit, the container dies alone and `restart` brings it back.
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+          cpus: "1.0"
+
+    # ---- Lifecycle ----------------------------------------------------------
+    # unless-stopped: restart on crash and on host reboot, but stay down if a
+    # human ran `docker compose stop`. `always` would override that deliberate
+    # human decision, which is exactly what you don't want at 3am.
+    restart: unless-stopped
+
+    # Compose reads the HEALTHCHECK from the image. Repeating it here would be
+    # a second place to keep in sync, so we don't — this comment exists so the
+    # next reader knows it wasn't forgotten.
+
+    # ---- Logging ------------------------------------------------------------
+    # Docker's default json-file driver has NO size limit, so on a long-running
+    # host the log file grows until the disk is full. This is a genuinely
+    # common cause of "the server died and nothing in the app changed".
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # Declared with no options: Docker manages the storage location.
+  # `docker compose down` keeps it. `docker compose down -v` deletes it —
+  # which is the command that loses your data, so it's worth knowing the -v.
+  cookieguard-data:

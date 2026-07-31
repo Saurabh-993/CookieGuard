@@ -59,17 +59,17 @@ from pathlib import Path
 # into named pieces: scheme=https, netloc=shop.example.com, path=/cart, etc.
 from urllib.parse import urlparse
 
-# The Playwright async API. `async_playwright` is the entry point that starts
-# Playwright's background driver process.
-# `TimeoutError` is renamed to PlaywrightTimeout so it does not collide with
-# Python's own built-in TimeoutError.
-from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
-
 # Our own shared domain logic, backed by Mozilla's Public Suffix List.
 # Both scan.py and classifier.py import from here so they can never disagree
 # about what counts as the same organisation.
 from domains import registrable_domain
+from playwright.async_api import TimeoutError as PlaywrightTimeout
 
+# The Playwright async API. `async_playwright` is the entry point that starts
+# Playwright's background driver process.
+# `TimeoutError` is renamed to PlaywrightTimeout so it does not collide with
+# Python's own built-in TimeoutError.
+from playwright.async_api import async_playwright
 
 # ---------------------------------------------------------------------------
 # CONFIGURATION CONSTANTS
@@ -106,6 +106,51 @@ VIEWPORT = {"width": 1366, "height": 768}
 # These are small, single-purpose functions. Keeping logic in small named
 # functions makes each piece independently testable and easy to explain.
 # ---------------------------------------------------------------------------
+
+
+def browser_launch_args() -> list:
+    """
+    Extra command-line flags for Chromium. Empty unless configured otherwise.
+
+    WHAT --no-sandbox ACTUALLY TURNS OFF
+    ------------------------------------
+    Chromium runs each web page in a separate RENDERER process that is stripped
+    of almost every operating-system privilege. If a malicious page finds a bug
+    in the rendering engine, the sandbox is what stops that becoming control of
+    the machine. Two barriers, not one.
+
+    `--no-sandbox` removes the second barrier. It is widely copy-pasted from
+    Stack Overflow because it makes "Chromium failed to launch" go away inside
+    containers — where the sandbox needs kernel privileges the container may
+    not have been granted.
+
+    WHY THIS MATTERS MORE FOR US THAN FOR MOST PROJECTS
+    ---------------------------------------------------
+    CookieGuard points a browser at URLs a stranger typed into a form. That is
+    exactly the threat model the sandbox was built for. So the flag is:
+
+        · OFF by default, everywhere
+        · turned on only by explicitly setting BROWSER_NO_SANDBOX=1
+        · NOT used by our docker-compose.yml, which instead grants the
+          container the SYS_ADMIN capability Chromium needs and keeps the
+          sandbox on — the better fix
+
+    Keeping the escape hatch is still right: someone will run this on a
+    platform where capabilities can't be granted, and they should reach for a
+    documented flag rather than editing this file in a hurry.
+
+    Read directly from the environment rather than importing api/config.py, so
+    the scanner stays runnable with no web dependencies installed.
+    """
+    import os
+
+    flag = (os.environ.get("BROWSER_NO_SANDBOX") or "").strip().lower()
+    if flag in {"1", "true", "yes", "on"}:
+        # --disable-dev-shm-usage goes with it: containers default to a 64MB
+        # /dev/shm, and Chromium crashes on pages larger than that. This makes
+        # it use /tmp instead. Slower, but it doesn't fall over.
+        return ["--no-sandbox", "--disable-dev-shm-usage"]
+    return []
 
 def get_registrable_domain(hostname: str) -> str:
     """
@@ -258,7 +303,16 @@ async def scan_website(
         # HEADLESS means "no visible window". The browser is fully functional —
         # it renders, runs JavaScript, stores cookies — it just doesn't draw
         # pixels to a screen. That's essential on a server, which has no screen.
-        browser = await p.chromium.launch(headless=headless)
+        #
+        # PHASE 6 — the container flag.
+        # `browser_launch_args()` returns [] normally and ["--no-sandbox"] only
+        # when BROWSER_NO_SANDBOX is set. Read the docstring on that function
+        # before you set it: it disables a real security boundary, and we are
+        # pointing this browser at arbitrary user-supplied URLs.
+        browser = await p.chromium.launch(
+            headless=headless,
+            args=browser_launch_args(),
+        )
 
         # -------------------------------------------------------------------
         # STEP 3 — Create a fresh browsing context
@@ -400,7 +454,12 @@ async def scan_website(
         #   * One browser launch instead of two: roughly half the time
         raw_post_cookies = None
         consent_click = None
-        post_requests_start = len(network_requests)
+
+        # Mark where the pre-consent requests end. Everything appended to
+        # `network_requests` after this index was triggered BY the consent
+        # click — which is exactly the "what did agreeing actually unlock?"
+        # evidence the report is built on.
+        pre_consent_request_count = len(network_requests)
 
         if accept_consent:
             # Local import: only this code path needs it.
@@ -484,19 +543,43 @@ async def scan_website(
     # ----- Summarise the network requests by domain -----
     # Hundreds of raw requests are unreadable. What matters is: WHICH other
     # companies did this page contact, and how often?
-    third_party_domains = {}  # dict: domain name -> how many requests
-    for req in network_requests:
-        if req["party"] == "third":
-            # `.get(key, 0) + 1` is the standard "count occurrences" idiom:
-            # if we've seen this domain, add 1; if not, start at 0 and add 1.
-            third_party_domains[req["domain"]] = third_party_domains.get(req["domain"], 0) + 1
+    def summarise_third_parties(requests):
+        """Count third-party requests per domain, busiest first.
 
-    # Sort domains by request count, highest first.
-    # `sorted(...)` returns a list of (key, value) tuples.
-    # `key=lambda item: item[1]` says "sort by the second element" (the count).
-    # `reverse=True` makes it descending.
-    sorted_third_parties = sorted(
-        third_party_domains.items(), key=lambda item: item[1], reverse=True
+        Extracted into a function in Phase 6 because we now call it TWICE —
+        once for the requests seen before the consent click and once for all
+        of them. Same reasoning as `reshape()` above: two copies of a counting
+        rule drift apart, and then the before/after comparison is comparing
+        two slightly different things.
+        """
+        counts = {}
+        for req in requests:
+            if req["party"] == "third":
+                # `.get(key, 0) + 1` is the standard "count occurrences" idiom:
+                # if we've seen this domain, add 1; if not, start at 0 and add 1.
+                counts[req["domain"]] = counts.get(req["domain"], 0) + 1
+        # Sort domains by request count, highest first.
+        # `sorted(...)` returns a list of (key, value) tuples.
+        # `key=lambda item: item[1]` says "sort by the second element".
+        return sorted(counts.items(), key=lambda item: item[1], reverse=True)
+
+    sorted_third_parties = summarise_third_parties(network_requests)
+
+    # ⚠ BUG FIXED IN PHASE 6 — and found by a LINTER, which is the point.
+    #
+    # `post_requests_start` was assigned above and never read. Ruff flagged it
+    # as F841 (unused variable), which sounds like tidiness and wasn't: it was
+    # the marker recording where the pre-consent requests ended, and without it
+    # classifier.py was passing the SAME domain list as both `pre_domains` and
+    # `post_domains`. The diff therefore always reported "0 new domains
+    # contacted after consent" — a plausible-looking number that was structurally
+    # incapable of being anything else.
+    #
+    # Worth sitting with: the tests passed, the dashboard rendered, and the
+    # figure was always wrong. An unused variable is often a half-finished
+    # thought, and this is why "just style" warnings deserve a look.
+    pre_consent_third_parties = summarise_third_parties(
+        network_requests[:pre_consent_request_count]
     )
 
     finished_at = datetime.now(timezone.utc)
@@ -526,6 +609,12 @@ async def scan_website(
         # tuple type, and dicts are self-documenting for whoever reads the JSON.
         "third_party_domains": [
             {"domain": d, "request_count": n} for d, n in sorted_third_parties
+        ],
+        # The same summary, but only for requests made BEFORE the consent
+        # click. Identical to the list above when accept_consent is False,
+        # which is correct: nothing was clicked, so nothing was unlocked.
+        "pre_consent_third_party_domains": [
+            {"domain": d, "request_count": n} for d, n in pre_consent_third_parties
         ],
         # Keep the full request list too — Phase 2's classifier will scan these
         # URLs for tracker signatures (e.g. spotting "facebook.com/tr" pixels).
@@ -606,7 +695,7 @@ def print_report(result: dict) -> None:
     # ----- Consent diff, if we did a second pass -----
     click = result.get("consent_click")
     if click:
-        print(f"\n  CONSENT BANNER")
+        print("\n  CONSENT BANNER")
         print(f"  {sub}")
         if click.get("clicked"):
             print(f"  Clicked: \"{click.get('text')}\"")
@@ -625,17 +714,17 @@ def print_report(result: dict) -> None:
             # A completely different finding. The scan didn't see the site at
             # all, so EVERY number above is about the challenge page, not the
             # real one.
-            print(f"  ⚠  BLOCKED BY A BOT CHALLENGE")
+            print("  ⚠  BLOCKED BY A BOT CHALLENGE")
             print(f"  {sub}")
             print(f"  {click.get('detail')}")
-            print(f"  The scanner never reached the real site, so every figure")
-            print(f"  in this report describes the challenge page instead.")
-            print(f"  Anti-bot protection is a genuine limitation of automated")
-            print(f"  scanning — not a finding about the site's cookies.")
+            print("  The scanner never reached the real site, so every figure")
+            print("  in this report describes the challenge page instead.")
+            print("  Anti-bot protection is a genuine limitation of automated")
+            print("  scanning — not a finding about the site's cookies.")
         else:
             print(f"  No accept button found ({click.get('method')}).")
-            print(f"  NOTE: 'no banner found' is NOT the same as "
-                  f"'no tracking added'.")
+            print("  NOTE: 'no banner found' is NOT the same as "
+                  "'no tracking added'.")
 
             # DIAGNOSTICS. A bare "not found" tells you nothing about WHY.
             # Printing what we actually saw turns one run into an answer
