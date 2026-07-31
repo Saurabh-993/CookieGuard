@@ -1,0 +1,39 @@
+# ============================================================
+# CookieGuard - Python dependencies
+#
+# Install with uv (fast):   uv pip install -r requirements.txt
+#
+# NOTE ON VERSION RANGES
+# ----------------------
+# We use `>=` (minimum version) rather than `==` (exact pin) here.
+# Reason: an exact pin can point at a version that has no pre-built
+# "wheel" for your Python version, forcing pip/uv to COMPILE the
+# package from source — which needs a Rust or C compiler and usually
+# fails on Windows. Ranges let the resolver pick a version that has
+# a ready-made wheel for your interpreter.
+#
+# For reproducible builds we lock exact versions separately:
+#     uv pip freeze > requirements.lock.txt
+# See docs/TEACHING.md §25 for the full explanation.
+# ============================================================
+
+# --- Phase 1: Scanner ---
+# Playwright drives a REAL browser (Chromium) from Python so we can
+# see every cookie a site actually sets, including ones created by
+# JavaScript after the page loads.
+playwright>=1.48
+
+# --- Phase 3: REST API (installed now so the env is complete) ---
+# FastAPI = the web framework that will expose our scan endpoints.
+fastapi>=0.115
+
+# Uvicorn = the ASGI web server that actually runs FastAPI.
+# (FastAPI is the application; Uvicorn is the engine that serves it.)
+uvicorn[standard]>=0.30
+
+# Pydantic = data validation. FastAPI uses it to check that incoming
+# JSON has the right shape before our code ever sees it.
+pydantic>=2.9
+
+# --- Testing (used by GitHub Actions CI in Phase 6) ---
+pytest>=8.3
