@@ -65,6 +65,11 @@ from urllib.parse import urlparse
 # Python's own built-in TimeoutError.
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 
+# Our own shared domain logic, backed by Mozilla's Public Suffix List.
+# Both scan.py and classifier.py import from here so they can never disagree
+# about what counts as the same organisation.
+from domains import registrable_domain
+
 
 # ---------------------------------------------------------------------------
 # CONFIGURATION CONSTANTS
@@ -108,39 +113,20 @@ def get_registrable_domain(hostname: str) -> str:
 
         "www.google-analytics.com"  ->  "google-analytics.com"
         "shop.example.com"          ->  "example.com"
-        ".example.com"              ->  "example.com"
+        "www.bbc.co.uk"             ->  "bbc.co.uk"
 
     WHY WE NEED THIS
     ----------------
     If the page is `www.example.com` and a cookie's domain is `.example.com`,
     those are the SAME organisation — it's a first-party cookie. A naive string
-    comparison would wrongly call it third-party. This function normalises both
-    sides so the comparison is meaningful.
+    comparison would wrongly call it third-party. This normalises both sides so
+    the comparison is meaningful.
 
-    HONEST LIMITATION
-    -----------------
-    Taking the last two labels is a simplification. It is wrong for multi-part
-    public suffixes like `example.co.uk` (we'd return "co.uk"). The fully
-    correct solution is Mozilla's Public Suffix List, via the `tldextract`
-    library. We accept this trade-off for the MVP to avoid an extra dependency,
-    and it is recorded as a known issue in docs/AI_CONTEXT.md.
+    The real work happens in `domains.py`, which uses Mozilla's Public Suffix
+    List. This is a thin wrapper kept for readability at the call sites.
+    See domains.py for why the obvious "last two labels" approach is wrong.
     """
-    # Cookie domains often start with a dot (".example.com") meaning "this
-    # domain and all its subdomains". `lstrip(".")` removes leading dots.
-    # `.lower()` because domain names are case-insensitive.
-    hostname = hostname.lstrip(".").lower()
-
-    # Split "www.example.com" into ["www", "example", "com"].
-    parts = hostname.split(".")
-
-    # If there are 2 or fewer parts it's already the core domain ("example.com"),
-    # or it's something odd like "localhost" — either way, return it unchanged.
-    if len(parts) <= 2:
-        return hostname
-
-    # Otherwise take the LAST two parts and join them back with a dot.
-    # parts[-2:] is Python slice syntax meaning "from the 2nd-last to the end".
-    return ".".join(parts[-2:])
+    return registrable_domain(hostname)
 
 
 def classify_party(cookie_domain: str, site_domain: str) -> str:

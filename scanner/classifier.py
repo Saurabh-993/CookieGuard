@@ -46,6 +46,13 @@ import re  # regular expressions — pattern matching for text
 import sys
 from pathlib import Path
 
+# Make this file importable both as `python scanner/classifier.py` and as
+# `from classifier import ...` by another package (api/db.py does this).
+# Adding our own folder to sys.path means `import domains` resolves either way.
+sys.path.insert(0, str(Path(__file__).parent))
+
+from domains import registrable_domain  # noqa: E402  (after path setup)
+
 # ---------------------------------------------------------------------------
 # CONSTANTS
 # ---------------------------------------------------------------------------
@@ -88,17 +95,15 @@ def load_trackers(path: Path = TRACKERS_PATH) -> dict:
 # ---------------------------------------------------------------------------
 # DOMAIN HELPERS
 # ---------------------------------------------------------------------------
-# We duplicate this small function from scan.py rather than importing it, so
-# the classifier can be used standalone (and unit-tested) without pulling in
-# Playwright. It is four lines; the coupling would cost more than the copy.
-
-def _registrable_domain(hostname: str) -> str:
-    """Reduce 'www.google-analytics.com' to 'google-analytics.com'."""
-    hostname = hostname.lstrip(".").lower()
-    parts = hostname.split(".")
-    if len(parts) <= 2:
-        return hostname
-    return ".".join(parts[-2:])
+# `_registrable_domain` used to be a private copy of the same four lines that
+# lived in scan.py. That duplication was a latent bug: two copies of a rule
+# WILL eventually drift apart and start disagreeing about whether a cookie is
+# first- or third-party. Both now import the single implementation in
+# domains.py, which uses Mozilla's Public Suffix List.
+#
+# The alias below keeps the old private name working so existing tests and
+# call sites don't have to change.
+_registrable_domain = registrable_domain
 
 
 def sorted_domain_signatures(trackers: dict) -> list:

@@ -175,14 +175,16 @@ CookieGuard/
 ├── scanner/
 │   ├── scan.py              # Playwright — opens a browser, captures cookies + network requests
 │   ├── classifier.py        # Categorises each cookie + computes a compliance score
-│   └── trackers.json        # Signature database: 272 known trackers (_ga → Analytics, etc.)
+│   ├── domains.py           # Public Suffix List — "what is the core domain of this host?"
+│   └── trackers.json        # Signature database: 276 known trackers (_ga → Analytics, etc.)
 │
 ├── tests/
-│   └── test_classifier.py   # 30 pytest tests for the classification logic
+│   ├── test_classifier.py   # 33 tests for the classification logic
+│   └── test_db.py           # 36 tests for the database layer
 │
 ├── api/
+│   ├── db.py                # SQLite: schema, transactional writes, all queries
 │   ├── main.py              # Phase 3 — FastAPI app; defines all REST endpoints
-│   ├── db.py                # Phase 3 — SQLite connection, table creation, queries
 │   └── schemas.py           # Phase 3 — Pydantic models describing request/response JSON shapes
 │
 ├── frontend/
@@ -387,6 +389,34 @@ Sample output:
   PHPSESSID        necessary   PHP                    first  exact name 'PHPSESSID'
 ```
 
+### Store and query scans (Phase 2b — available now)
+
+```bash
+python api/db.py init                    # create the database
+python api/db.py save data/bbc.json      # classify and store a scan
+python api/db.py list                    # every domain scanned
+python api/db.py history bbc.com         # scan history
+python api/db.py report bbc.com          # audit report + trend
+python api/db.py show 2                  # one scan in detail
+```
+
+Sample report:
+
+```
+  LATEST RESULT
+  Score  : 33/100   Grade: F
+  Cookies: 24  (necessary 4, analytics 16, marketing 3, unknown 1)
+
+  ACROSS ALL SCANS
+  Average score : 16.5
+  Best / worst  : 33 / 0
+  Trend         : IMPROVING
+
+  SCORE HISTORY
+  2026-07-31    0
+  2026-08-14   33  #############
+```
+
 ### Run the tests
 
 ```bash
@@ -483,8 +513,8 @@ Once the API exists, FastAPI will auto-generate live, testable documentation at
 |-------|-------|--------|
 | **1** | Project setup, documentation, Playwright scanner | ✅ **Done** |
 | **2a** | Classifier + `trackers.json` + tests | ✅ **Done** |
-| **2b** | SQLite database | ⬜ Next |
-| **3** | FastAPI REST endpoints | ⬜ Pending |
+| **2b** | SQLite database + Public Suffix List fix | ✅ **Done** |
+| **3** | FastAPI REST endpoints | ⬜ Next |
 | **4** | Dashboard (tables + charts + audit report) | ⬜ Pending |
 | **5** | Consent banner | ⬜ Pending |
 | **6** | Docker + GitHub Actions CI/CD | ⬜ Pending |

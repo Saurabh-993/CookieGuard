@@ -23,6 +23,12 @@
 # JavaScript after the page loads.
 playwright>=1.48
 
+# tldextract gives us Mozilla's Public Suffix List, which is the only correct
+# way to reduce "www.bbc.co.uk" to "bbc.co.uk" rather than "co.uk".
+# We pin it to the bundled offline snapshot in scanner/domains.py so it never
+# makes a network call at import time - see docs/TEACHING.md §43.
+tldextract>=5.1
+
 # --- Phase 3: REST API (installed now so the env is complete) ---
 # FastAPI = the web framework that will expose our scan endpoints.
 fastapi>=0.115
