@@ -174,8 +174,11 @@ result is saved to SQLite → the API returns JSON → the dashboard renders it.
 CookieGuard/
 ├── scanner/
 │   ├── scan.py              # Playwright — opens a browser, captures cookies + network requests
-│   ├── classifier.py        # Phase 2 — assigns a compliance category to each cookie
-│   └── trackers.json        # Phase 2 — signature database of known trackers (_ga → Analytics, etc.)
+│   ├── classifier.py        # Categorises each cookie + computes a compliance score
+│   └── trackers.json        # Signature database: 110 known trackers (_ga → Analytics, etc.)
+│
+├── tests/
+│   └── test_classifier.py   # 30 pytest tests for the classification logic
 │
 ├── api/
 │   ├── main.py              # Phase 3 — FastAPI app; defines all REST endpoints
@@ -342,6 +345,54 @@ Sample output:
 ============================================================
 ```
 
+### Classify a scan (Phase 2a — available now)
+
+Scan first, saving the result, then classify it:
+
+```bash
+python scanner/scan.py https://www.bbc.com --output data/bbc.json
+python scanner/classifier.py data/bbc.json
+```
+
+Save the classified output too:
+
+```bash
+python scanner/classifier.py data/bbc.json --output data/bbc_classified.json
+```
+
+Sample output:
+
+```
+  COMPLIANCE SCORE: 13/100   Grade: F
+  Failing — extensive tracking before any consent
+
+  Cookies set BEFORE consent that legally require it: 14
+
+  Points deducted for:
+     -39  Marketing cookies set before consent (x7)
+     -21  Analytics cookies set before consent (x4)
+     -10  Unclassified cookies requiring manual review (x2)
+
+  CATEGORY BREAKDOWN
+  [OK] Necessary     3  ###
+  [  ] Functional    1  #
+  [! ] Analytics     4  ####
+  [!!] Marketing     7  #######
+  [??] Unknown       2  ##
+
+  NAME             CATEGORY    VENDOR                 PARTY  MATCHED BY
+  _fbp             marketing   Meta (Facebook Pixel)  first  exact name '_fbp'
+  IDE              marketing   Google DoubleClick     third  exact name 'IDE'
+  _ga              analytics   Google Analytics       first  exact name '_ga'
+  PHPSESSID        necessary   PHP                    first  exact name 'PHPSESSID'
+```
+
+### Run the tests
+
+```bash
+pytest -v
+```
+
 ### Run the API (Phase 3 — coming soon)
 
 ```bash
@@ -431,7 +482,8 @@ Once the API exists, FastAPI will auto-generate live, testable documentation at
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **1** | Project setup, documentation, Playwright scanner | ✅ **Done** |
-| **2** | Classifier + `trackers.json` + SQLite database | ⬜ Next |
+| **2a** | Classifier + `trackers.json` + tests | ✅ **Done** |
+| **2b** | SQLite database | ⬜ Next |
 | **3** | FastAPI REST endpoints | ⬜ Pending |
 | **4** | Dashboard (tables + charts + audit report) | ⬜ Pending |
 | **5** | Consent banner | ⬜ Pending |

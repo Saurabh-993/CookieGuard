@@ -22,3 +22,4 @@ Thumbs.db
 
 # Environment secrets
 .env
+docs/*.md

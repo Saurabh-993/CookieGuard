@@ -1,0 +1,517 @@
+{
+  "_readme": [
+    "CookieGuard tracker signature database.",
+    "",
+    "This file is DATA, not code. The classifier reads it at runtime, so you can",
+    "add a new tracker without touching any Python. That separation is deliberate:",
+    "tracker lists change constantly, application logic does not.",
+    "",
+    "MATCHING PRECEDENCE (highest confidence first):",
+    "  1. cookie_signatures with match='exact'   - the cookie name matches exactly",
+    "  2. cookie_signatures with match='prefix'  - the cookie name starts with this",
+    "  3. domain_signatures                      - the cookie's DOMAIN is a known tracker",
+    "  4. generic_patterns                       - regex heuristics for common names",
+    "  5. 'unknown'                              - no match; needs human review",
+    "",
+    "CATEGORIES:",
+    "  necessary  - site cannot function without it. NO consent required (legally exempt).",
+    "  functional - improves experience; site works without it. Consent required.",
+    "  analytics  - measures usage. Consent required (NOT exempt, however much",
+    "               businesses argue otherwise).",
+    "  marketing  - advertising, retargeting, cross-site profiling. Consent required,",
+    "               and the highest regulatory scrutiny.",
+    "",
+    "Sources: vendor documentation, ICO/CNIL guidance, and the public Open Cookie",
+    "Database. Classifications are a technical aid, NOT legal advice."
+  ],
+
+  "version": "1.0",
+  "updated": "2026-07-31",
+
+  "cookie_signatures": [
+
+    {
+      "pattern": "_ga",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Google Analytics",
+      "purpose": "Primary visitor ID. Distinguishes unique users. Default lifetime 2 years."
+    },
+    {
+      "pattern": "_ga_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Google Analytics 4",
+      "purpose": "Per-property session state, e.g. _ga_ABC123XYZ. Suffix is the GA4 measurement ID."
+    },
+    {
+      "pattern": "_gid",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Google Analytics",
+      "purpose": "Distinguishes users over a 24-hour window."
+    },
+    {
+      "pattern": "_gat",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Google Analytics",
+      "purpose": "Throttles the request rate to Google's servers. Very short lifetime (~1 min)."
+    },
+    {
+      "pattern": "__utm",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Google Analytics (legacy Urchin)",
+      "purpose": "Legacy __utma/__utmb/__utmz cookies. Their presence suggests an outdated GA install."
+    },
+    {
+      "pattern": "_hj",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Hotjar",
+      "purpose": "Session recording and heatmaps. Records how a user moves and clicks on a page."
+    },
+    {
+      "pattern": "mp_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Mixpanel",
+      "purpose": "Product analytics: per-user event tracking across a session."
+    },
+    {
+      "pattern": "amplitude_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Amplitude",
+      "purpose": "Product analytics device/session identifier."
+    },
+    {
+      "pattern": "ajs_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Segment",
+      "purpose": "Customer data platform. Collects events then forwards them to many other tools."
+    },
+    {
+      "pattern": "_pk_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Matomo (formerly Piwik)",
+      "purpose": "Self-hosted analytics. Often chosen as a privacy-friendlier GA alternative."
+    },
+    {
+      "pattern": "_clck",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Microsoft Clarity",
+      "purpose": "Persists a Clarity user ID and session recording preferences."
+    },
+    {
+      "pattern": "_clsk",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Microsoft Clarity",
+      "purpose": "Connects multiple page views by one user into a single recording."
+    },
+    {
+      "pattern": "s_cc",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Adobe Analytics",
+      "purpose": "Determines whether cookies are enabled in the browser."
+    },
+    {
+      "pattern": "s_sq",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Adobe Analytics",
+      "purpose": "Stores which link the user clicked, for ClickMap reporting."
+    },
+    {
+      "pattern": "optimizelyEndUserId",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Optimizely",
+      "purpose": "A/B testing. Keeps a visitor in the same test variant across visits."
+    },
+
+    {
+      "pattern": "_fbp",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Meta (Facebook Pixel)",
+      "purpose": "Browser identifier for ad delivery and conversion attribution. The single most common marketing cookie on the web."
+    },
+    {
+      "pattern": "_fbc",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Meta (Facebook Pixel)",
+      "purpose": "Stores the click ID from a Facebook ad, so a later purchase can be attributed to that ad."
+    },
+    {
+      "pattern": "fr",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Meta (Facebook)",
+      "purpose": "Encrypted Facebook ID and browser ID used for ad targeting. Set on the facebook.com domain."
+    },
+    {
+      "pattern": "_gcl_",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Google Ads",
+      "purpose": "Conversion linker. Carries ad-click information so conversions can be attributed."
+    },
+    {
+      "pattern": "IDE",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Google DoubleClick",
+      "purpose": "Registers and reports user actions after viewing or clicking an ad, to measure effectiveness."
+    },
+    {
+      "pattern": "test_cookie",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Google DoubleClick",
+      "purpose": "Checks whether the browser accepts cookies before ad serving begins."
+    },
+    {
+      "pattern": "_ttp",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "TikTok",
+      "purpose": "TikTok Pixel identifier for ad measurement and retargeting."
+    },
+    {
+      "pattern": "bcookie",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "LinkedIn",
+      "purpose": "Browser identifier used for advertising and platform features."
+    },
+    {
+      "pattern": "lidc",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "LinkedIn",
+      "purpose": "Routing cookie for LinkedIn's data centres; also used in ad delivery."
+    },
+    {
+      "pattern": "UserMatchHistory",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "LinkedIn",
+      "purpose": "Ad ID syncing - matches LinkedIn's user ID with other ad networks' IDs."
+    },
+    {
+      "pattern": "li_sugr",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "LinkedIn",
+      "purpose": "Probabilistic browser identifier for cross-device ad targeting."
+    },
+    {
+      "pattern": "personalization_id",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "X (Twitter)",
+      "purpose": "Integrates and personalises Twitter content and advertising."
+    },
+    {
+      "pattern": "MUID",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Microsoft Advertising",
+      "purpose": "Identifies unique browsers visiting Microsoft sites, for advertising and analytics."
+    },
+    {
+      "pattern": "_uet",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Microsoft Bing UET",
+      "purpose": "Universal Event Tracking. _uetsid and _uetvid track sessions and visitors for Bing Ads."
+    },
+    {
+      "pattern": "__hs",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "HubSpot",
+      "purpose": "__hstc / __hssc / __hssrc track visitor sessions for marketing automation and lead scoring."
+    },
+    {
+      "pattern": "hubspotutk",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "HubSpot",
+      "purpose": "Keeps a visitor's identity across form submissions, linking browsing history to a contact record."
+    },
+    {
+      "pattern": "_pin_unauth",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Pinterest",
+      "purpose": "Groups actions by users who cannot be identified by a Pinterest account."
+    },
+    {
+      "pattern": "sc_at",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Snapchat",
+      "purpose": "Snap Pixel identifier for ad conversion tracking."
+    },
+    {
+      "pattern": "_rdt_uuid",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Reddit",
+      "purpose": "Reddit Pixel identifier for conversion tracking and retargeting."
+    },
+    {
+      "pattern": "uuid2",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "AppNexus / Xandr",
+      "purpose": "Real-time-bidding identifier shared across the programmatic ad ecosystem."
+    },
+
+    {
+      "pattern": "intercom-",
+      "match": "prefix",
+      "category": "functional",
+      "vendor": "Intercom",
+      "purpose": "Live chat widget state. The site works without it, so it is not strictly necessary."
+    },
+    {
+      "pattern": "__zlcmid",
+      "match": "exact",
+      "category": "functional",
+      "vendor": "Zendesk / Zopim Chat",
+      "purpose": "Remembers a live-chat visitor between sessions."
+    },
+    {
+      "pattern": "wp-settings-",
+      "match": "prefix",
+      "category": "functional",
+      "vendor": "WordPress",
+      "purpose": "Stores interface preferences for logged-in WordPress users."
+    },
+    {
+      "pattern": "NEXT_LOCALE",
+      "match": "exact",
+      "category": "functional",
+      "vendor": "Next.js",
+      "purpose": "Remembers the user's chosen language for internationalised routing."
+    },
+
+    {
+      "pattern": "PHPSESSID",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "PHP",
+      "purpose": "Server-side session identifier. Without it a logged-in user is logged out on every page."
+    },
+    {
+      "pattern": "JSESSIONID",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Java / Tomcat",
+      "purpose": "Java servlet container session identifier."
+    },
+    {
+      "pattern": "ASP.NET_SessionId",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Microsoft ASP.NET",
+      "purpose": "ASP.NET session identifier."
+    },
+    {
+      "pattern": "__Host-",
+      "match": "prefix",
+      "category": "necessary",
+      "vendor": "Browser security standard",
+      "purpose": "The __Host- prefix forces Secure, Path=/ and no Domain attribute. Reserved for security-critical cookies such as session tokens."
+    },
+    {
+      "pattern": "__Secure-",
+      "match": "prefix",
+      "category": "necessary",
+      "vendor": "Browser security standard",
+      "purpose": "The __Secure- prefix forces the Secure flag. Used for authentication cookies."
+    },
+    {
+      "pattern": "__cf_bm",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Cloudflare",
+      "purpose": "Bot management. Distinguishes humans from bots. Security function, so exempt from consent."
+    },
+    {
+      "pattern": "cf_clearance",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Cloudflare",
+      "purpose": "Records that a visitor passed a challenge page, so it is not shown repeatedly."
+    },
+    {
+      "pattern": "AWSALB",
+      "match": "prefix",
+      "category": "necessary",
+      "vendor": "Amazon Web Services",
+      "purpose": "Application Load Balancer stickiness - keeps a user on the same backend server. A textbook example of a legally exempt technical cookie."
+    },
+    {
+      "pattern": "incap_ses_",
+      "match": "prefix",
+      "category": "necessary",
+      "vendor": "Imperva Incapsula",
+      "purpose": "Web application firewall session identifier. Security function."
+    },
+    {
+      "pattern": "OptanonConsent",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "OneTrust",
+      "purpose": "Stores which cookie categories the user consented to. The consent record itself is necessary - you must remember a refusal in order to honour it."
+    },
+    {
+      "pattern": "OptanonAlertBoxClosed",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "OneTrust",
+      "purpose": "Records that the consent banner has been dismissed, so it is not shown again."
+    },
+    {
+      "pattern": "CookieConsent",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Cookiebot",
+      "purpose": "Stores the user's consent state for the current domain."
+    }
+  ],
+
+  "domain_signatures": [
+
+    { "domain": "google-analytics.com", "category": "analytics", "vendor": "Google Analytics", "purpose": "Analytics data collection endpoint." },
+    { "domain": "analytics.google.com",  "category": "analytics", "vendor": "Google Analytics", "purpose": "GA4 collection endpoint." },
+    { "domain": "googletagmanager.com",  "category": "analytics", "vendor": "Google Tag Manager", "purpose": "Tag container. Itself only a loader, but it injects other trackers - treat its presence as a strong signal." },
+    { "domain": "hotjar.com",            "category": "analytics", "vendor": "Hotjar", "purpose": "Session recording and heatmaps." },
+    { "domain": "mixpanel.com",          "category": "analytics", "vendor": "Mixpanel", "purpose": "Product analytics." },
+    { "domain": "segment.io",            "category": "analytics", "vendor": "Segment", "purpose": "Customer data platform." },
+    { "domain": "segment.com",           "category": "analytics", "vendor": "Segment", "purpose": "Customer data platform." },
+    { "domain": "amplitude.com",         "category": "analytics", "vendor": "Amplitude", "purpose": "Product analytics." },
+    { "domain": "clarity.ms",            "category": "analytics", "vendor": "Microsoft Clarity", "purpose": "Session recording and heatmaps." },
+    { "domain": "scorecardresearch.com", "category": "analytics", "vendor": "Comscore", "purpose": "Audience measurement across publisher sites." },
+    { "domain": "quantserve.com",        "category": "analytics", "vendor": "Quantcast", "purpose": "Audience measurement and segmentation." },
+    { "domain": "newrelic.com",          "category": "analytics", "vendor": "New Relic", "purpose": "Application performance monitoring." },
+    { "domain": "nr-data.net",           "category": "analytics", "vendor": "New Relic", "purpose": "Browser performance beacon endpoint." },
+    { "domain": "sentry.io",             "category": "analytics", "vendor": "Sentry", "purpose": "Client-side error monitoring." },
+    { "domain": "cloudflareinsights.com","category": "analytics", "vendor": "Cloudflare", "purpose": "Privacy-focused web analytics." },
+
+    { "domain": "doubleclick.net",       "category": "marketing", "vendor": "Google DoubleClick", "purpose": "Ad serving and retargeting." },
+    { "domain": "googlesyndication.com", "category": "marketing", "vendor": "Google AdSense", "purpose": "Ad delivery network." },
+    { "domain": "googleadservices.com",  "category": "marketing", "vendor": "Google Ads", "purpose": "Ad click tracking and conversion measurement." },
+    { "domain": "facebook.com",          "category": "marketing", "vendor": "Meta", "purpose": "Social plugins and the Facebook Pixel." },
+    { "domain": "facebook.net",          "category": "marketing", "vendor": "Meta", "purpose": "connect.facebook.net serves the Pixel script." },
+    { "domain": "ads-twitter.com",       "category": "marketing", "vendor": "X (Twitter)", "purpose": "Twitter conversion tracking." },
+    { "domain": "linkedin.com",          "category": "marketing", "vendor": "LinkedIn", "purpose": "Insight Tag for ad targeting and conversion tracking." },
+    { "domain": "licdn.com",             "category": "marketing", "vendor": "LinkedIn", "purpose": "LinkedIn CDN, serves the Insight Tag." },
+    { "domain": "tiktok.com",            "category": "marketing", "vendor": "TikTok", "purpose": "TikTok Pixel." },
+    { "domain": "bing.com",              "category": "marketing", "vendor": "Microsoft Advertising", "purpose": "bat.bing.com is the UET conversion tracking endpoint." },
+    { "domain": "criteo.com",            "category": "marketing", "vendor": "Criteo", "purpose": "Retargeting - shows you ads for products you previously viewed." },
+    { "domain": "criteo.net",            "category": "marketing", "vendor": "Criteo", "purpose": "Retargeting ad delivery." },
+    { "domain": "taboola.com",           "category": "marketing", "vendor": "Taboola", "purpose": "Sponsored content recommendation widgets." },
+    { "domain": "outbrain.com",          "category": "marketing", "vendor": "Outbrain", "purpose": "Sponsored content recommendation widgets." },
+    { "domain": "adnxs.com",             "category": "marketing", "vendor": "AppNexus / Xandr", "purpose": "Real-time bidding ad exchange." },
+    { "domain": "pubmatic.com",          "category": "marketing", "vendor": "PubMatic", "purpose": "Programmatic ad exchange." },
+    { "domain": "rubiconproject.com",    "category": "marketing", "vendor": "Magnite (Rubicon)", "purpose": "Programmatic ad exchange." },
+    { "domain": "openx.net",             "category": "marketing", "vendor": "OpenX", "purpose": "Programmatic ad exchange." },
+    { "domain": "adsrvr.org",            "category": "marketing", "vendor": "The Trade Desk", "purpose": "Demand-side platform for programmatic advertising." },
+    { "domain": "amazon-adsystem.com",   "category": "marketing", "vendor": "Amazon Advertising", "purpose": "Amazon's ad delivery and retargeting network." },
+    { "domain": "pinterest.com",         "category": "marketing", "vendor": "Pinterest", "purpose": "Pinterest Tag conversion tracking." },
+    { "domain": "snapchat.com",          "category": "marketing", "vendor": "Snap", "purpose": "Snap Pixel conversion tracking." },
+    { "domain": "redditstatic.com",      "category": "marketing", "vendor": "Reddit", "purpose": "Reddit Pixel conversion tracking." },
+    { "domain": "hubspot.com",           "category": "marketing", "vendor": "HubSpot", "purpose": "Marketing automation and lead tracking." },
+    { "domain": "hs-scripts.com",        "category": "marketing", "vendor": "HubSpot", "purpose": "HubSpot tracking script host." },
+
+    { "domain": "intercom.io",           "category": "functional", "vendor": "Intercom", "purpose": "Live chat widget." },
+    { "domain": "zdassets.com",          "category": "functional", "vendor": "Zendesk", "purpose": "Support widget assets." },
+    { "domain": "fonts.googleapis.com",  "category": "functional", "vendor": "Google Fonts", "purpose": "Web font delivery. Note: a 2022 Munich court ruling held that embedding Google Fonts leaks the visitor's IP to Google and breaches GDPR - self-hosting is the safe option." },
+    { "domain": "fonts.gstatic.com",     "category": "functional", "vendor": "Google Fonts", "purpose": "Web font file delivery. Same GDPR caveat as above." },
+    { "domain": "youtube.com",           "category": "marketing",  "vendor": "Google / YouTube", "purpose": "Embedded video. Standard embeds set advertising cookies - youtube-nocookie.com is the privacy-preserving alternative." },
+    { "domain": "vimeo.com",             "category": "functional", "vendor": "Vimeo", "purpose": "Embedded video player." },
+
+    { "domain": "cdnjs.cloudflare.com",  "category": "necessary", "vendor": "Cloudflare CDN", "purpose": "Serves JavaScript libraries the site needs to run." },
+    { "domain": "jsdelivr.net",          "category": "necessary", "vendor": "jsDelivr CDN", "purpose": "Open-source package delivery." },
+    { "domain": "unpkg.com",             "category": "necessary", "vendor": "unpkg CDN", "purpose": "npm package delivery." },
+    { "domain": "recaptcha.net",         "category": "necessary", "vendor": "Google reCAPTCHA", "purpose": "Bot protection on forms. Security function, so consent-exempt - though its data flows to Google remain contested." }
+  ],
+
+  "generic_patterns": [
+    {
+      "pattern": "^(php|jsp|asp)?[-_]?sess(ion)?[-_]?id$",
+      "match": "regex",
+      "category": "necessary",
+      "vendor": "Generic",
+      "purpose": "Matches session-identifier naming conventions such as sessionid, session_id, sess_id."
+    },
+    {
+      "pattern": "^(_|x-)?csrf[-_]?(token)?$",
+      "match": "regex",
+      "category": "necessary",
+      "vendor": "Generic",
+      "purpose": "Cross-Site Request Forgery token. A security control, so consent-exempt."
+    },
+    {
+      "pattern": "^xsrf[-_]token$",
+      "match": "regex",
+      "category": "necessary",
+      "vendor": "Generic",
+      "purpose": "CSRF token as named by Angular, Laravel and similar frameworks."
+    },
+    {
+      "pattern": "^(cart|basket)([-_]?id)?$",
+      "match": "regex",
+      "category": "necessary",
+      "vendor": "Generic",
+      "purpose": "Shopping cart contents. Explicitly named as consent-exempt in EU regulator guidance."
+    },
+    {
+      "pattern": "^(csrf|auth|login|user)[-_]?token$",
+      "match": "regex",
+      "category": "necessary",
+      "vendor": "Generic",
+      "purpose": "Authentication token needed to keep a user logged in."
+    },
+    {
+      "pattern": "^(lang|language|locale|country|region)$",
+      "match": "regex",
+      "category": "functional",
+      "vendor": "Generic",
+      "purpose": "Stores the user's chosen language or region."
+    },
+    {
+      "pattern": "^(theme|dark[-_]?mode|color[-_]?scheme|font[-_]?size)$",
+      "match": "regex",
+      "category": "functional",
+      "vendor": "Generic",
+      "purpose": "Stores a display preference such as dark mode."
+    },
+    {
+      "pattern": "^(currency|timezone|tz)$",
+      "match": "regex",
+      "category": "functional",
+      "vendor": "Generic",
+      "purpose": "Stores a localisation preference."
+    },
+    {
+      "pattern": "^(cookie[-_]?consent|consent[-_]?(given|state|status)|gdpr)$",
+      "match": "regex",
+      "category": "necessary",
+      "vendor": "Generic",
+      "purpose": "Records the user's consent choice. Necessary, because you must remember a refusal in order to honour it."
+    }
+  ]
+}
