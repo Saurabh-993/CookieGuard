@@ -58,6 +58,7 @@ const state = {
   selectedDomain: null,
   cookieFilter: 'all',    // which category chip is active
   cookieSearch: '',       // text in the search box
+  health: null,           // last /health response, shown on Settings
 };
 
 /*
@@ -154,9 +155,16 @@ function applyTheme(theme) {
   }
   refreshColors();          // pick up the new theme's variable values
   const btn = $('#theme-toggle');
-  if (btn) {
+  const icon = $('#theme-icon');
+  if (btn && icon) {
     const isDark = resolvedTheme() === 'dark';
-    btn.textContent = isDark ? '☀️' : '🌙';
+    // Swap the SVG's path data rather than the whole element, so the button
+    // keeps its focus state and no layout shift occurs.
+    icon.innerHTML = isDark
+      ? `<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41
+         M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41
+         M19.07 4.93l-1.41 1.41"/>`
+      : `<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>`;
     btn.title = isDark ? 'Switch to light mode' : 'Switch to dark mode';
   }
 }
@@ -317,17 +325,21 @@ async function api(path, options = {}) {
    ========================================================================== */
 
 async function checkHealth() {
-  const dot  = $('#api-status .dot');
+  const pill = $('#api-status');
   const text = $('#api-status-text');
   try {
-    const health = await api('/health');
-    dot.className = 'dot dot-ok';
-    text.textContent = `Connected · ${health.scans_stored} scans`;
+    state.health = await api('/health');
+    pill.className = 'status-pill status-live';
+    text.textContent = 'Live';
+    show($('#demo-banner'), false);
     show($('#global-error'), false);
     return true;
   } catch (err) {
-    dot.className = 'dot dot-error';
+    // Design B's demo-mode idea: never present sample data as if it were live.
+    // Here there IS no sample data, so we say plainly that nothing is live.
+    pill.className = 'status-pill status-offline';
     text.textContent = 'Offline';
+    show($('#demo-banner'), true);
     $('#global-error-detail').textContent = err.message;
     show($('#global-error'), true);
     return false;
@@ -351,68 +363,120 @@ async function loadDomains() {
 }
 
 function renderDomains() {
+  renderDomainStats();
+
   const tbody = $('#domains-tbody');
   show($('#domains-empty'), state.domains.length === 0);
 
-  /*
-    BUILDING HTML: why `.map().join('')` and one innerHTML assignment.
+  const ICON_REPORT = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18"
+      y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6"
+      y1="20" x2="6" y2="14"/></svg>`;
+  const ICON_LIST = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+      stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8"
+      y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8"
+      y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3"
+      y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>`;
 
-    Writing to innerHTML forces the browser to re-parse and re-render. Doing it
-    once per row means N reflows; building the whole string first means one.
-    With 200 cookies that difference is visible.
-
-    `.map()` transforms each item into a string; `.join('')` glues them
-    together with nothing in between.
-  */
   tbody.innerHTML = state.domains.map((d) => {
     const score = d.avg_score === null || d.avg_score === undefined
-      ? '—'
-      : Math.round(d.avg_score);
-    const grade = scoreToGrade(score);
+      ? null : Math.round(d.avg_score);
+    const grade = score === null ? '—' : scoreToGrade(score);
 
     return `
-      <tr class="row-clickable" data-domain="${esc(d.domain)}">
-        <td><strong>${esc(d.domain)}</strong></td>
+      <tr data-domain="${esc(d.domain)}">
+        <td>
+          <div class="domain-cell">
+            <span class="domain-name">${esc(d.domain)}</span>
+          </div>
+        </td>
         <td class="num">${d.scan_count}</td>
         <td class="num">${d.max_cookies ?? 0}</td>
         <td>
-          ${score === '—' ? '—'
-            : `<span class="badge" style="background:${gradeColor(grade)}">
-                 ${score}/100 &nbsp;${grade}
-               </span>`}
+          ${score === null ? '<span class="muted">—</span>' : `
+            <div class="score-cell">
+              <div class="score-bar">
+                <div class="score-bar-fill"
+                     style="width:${score}%;background:${gradeColor(grade)}"></div>
+              </div>
+              <span class="score-value">${score}</span>
+            </div>`}
         </td>
-        <td class="muted">${fmtDate(d.latest_scan)}</td>
-        <td><button class="btn-link" data-report="${esc(d.domain)}">Report →</button></td>
+        <td>
+          ${grade === '—' ? '<span class="muted">—</span>'
+            : `<span class="grade-chip grade-chip-${esc(grade)}">${esc(grade)}</span>`}
+        </td>
+        <td class="muted" style="white-space:nowrap;font-size:.82rem">
+          ${fmtDate(d.latest_scan)}
+        </td>
+        <td>
+          <div class="row-actions">
+            <button class="btn-mini" data-report="${esc(d.domain)}">
+              ${ICON_REPORT} Report
+            </button>
+            <button class="btn-mini" data-inventory="${esc(d.domain)}">
+              ${ICON_LIST} Inventory
+            </button>
+          </div>
+        </td>
       </tr>`;
   }).join('');
 
-  /*
-    EVENT DELEGATION.
-
-    Instead of adding a listener to every row (which would need re-adding every
-    time we redraw), we add ONE listener to the table body and ask which
-    element was actually clicked.
-
-    This works because of EVENT BUBBLING: a click on a <td> also fires on its
-    <tr>, then <tbody>, then up to <body>. `event.target` is the deepest
-    element; `.closest(sel)` walks back up to find the row we care about.
-
-        one listener, survives redraws     ✅
-        N listeners, re-added every render ❌
-
-    Same idea as the Playwright request listener in §15 — register once, react
-    to many events.
-  */
+  // Event delegation — one listener, survives every redraw (§59).
   tbody.onclick = (event) => {
-    const reportBtn = event.target.closest('[data-report]');
-    if (reportBtn) {
-      openReport(reportBtn.dataset.report);
-      return;
-    }
-    const row = event.target.closest('[data-domain]');
-    if (row) openInventory(row.dataset.domain);
+    const report = event.target.closest('[data-report]');
+    if (report) { openReport(report.dataset.report); return; }
+    const inventory = event.target.closest('[data-inventory]');
+    if (inventory) { openInventory(inventory.dataset.inventory); }
   };
 }
+
+
+/* ---- Portfolio-level stat tiles ----
+   Design A's choice of metrics. Each answers a question an auditor actually
+   asks, rather than just counting rows:
+
+     "how much am I monitoring?"   → domains
+     "how big is the problem?"     → cookies
+     "how are we doing overall?"   → average score
+     "what needs attention now?"   → domains below 60          ← the actionable one
+*/
+function renderDomainStats() {
+  const domains = state.domains;
+  const scored = domains.filter(
+    (d) => d.avg_score !== null && d.avg_score !== undefined);
+
+  const totalCookies = domains.reduce((sum, d) => sum + (d.max_cookies || 0), 0);
+  const avg = scored.length
+    ? Math.round(scored.reduce((sum, d) => sum + d.avg_score, 0) / scored.length)
+    : null;
+  const failing = scored.filter((d) => d.avg_score < 60).length;
+
+  const avgColour = avg === null ? 'var(--text)'
+    : avg >= 75 ? 'var(--necessary)'
+    : avg >= 60 ? 'var(--analytics)'
+    : 'var(--marketing)';
+
+  const tiles = [
+    { label: 'Domains monitored', value: domains.length },
+    { label: 'Cookies in latest scans', value: totalCookies },
+    { label: 'Average score',
+      value: avg === null ? '—' : `${avg}/100`, colour: avgColour },
+    { label: 'Domains below 60', value: failing,
+      colour: failing ? 'var(--marketing)' : 'var(--necessary)',
+      hint: failing
+        ? 'Scores under 60 usually mean trackers fire before consent.'
+        : 'No domain is currently below the threshold.' },
+  ];
+
+  $('#domain-stats').innerHTML = tiles.map((t) => `
+    <div class="stat">
+      <div class="stat-label">${esc(t.label)}</div>
+      <div class="stat-value" style="color:${t.colour || 'var(--text)'}">${esc(t.value)}</div>
+      ${t.hint ? `<div class="stat-hint">${esc(t.hint)}</div>` : ''}
+    </div>`).join('');
+}
+
 
 function scoreToGrade(score) {
   if (score === '—' || score === null) return '—';
@@ -1110,6 +1174,71 @@ function chartUnavailable(svgId, message) {
   svg.insertAdjacentElement('afterend', note);
 }
 
+/*
+  chartFrame() — THE FIX FOR THE `<rect> width: negative value` CONSOLE ERRORS
+  ---------------------------------------------------------------------------
+  Every chart below did the same thing:
+
+      const innerW = box.width - margin.left - margin.right;
+
+  That is correct arithmetic and a latent bug. Two situations break it:
+
+    1. The chart is inside a HIDDEN view (`display: none`), so
+       getBoundingClientRect() returns width 0 → innerW = -170.
+    2. The chart is on a narrow phone. The vendor chart reserves 130px on the
+       left for labels and 40px on the right for values. In a 160px-wide
+       container that is 170px of margin in 160px of space → innerW = -10.
+
+  A negative range makes d3.scaleLinear() return negative pixels, which end up
+  in `.attr('width', …)`. SVG rejects negative widths, so the browser logs an
+  error PER RECT PER TRANSITION FRAME — which is why you saw 642 of them.
+
+  This helper does three things, and the middle one is the interesting one:
+
+    · returns null when the element is not laid out yet (draw nothing)
+    · SCALES THE MARGINS DOWN when they don't fit, rather than clipping.
+      A 130px label gutter is right at 700px wide and absurd at 300px. We
+      keep the same PROPORTION of the box for labels instead of a fixed px.
+    · guarantees innerW/innerH are at least 1
+
+  General principle: any layout maths that subtracts constants from a measured
+  size needs a floor. The measurement can always be smaller than you assumed.
+*/
+function chartFrame(svgSel, margin) {
+  const node = svgSel.node();
+  if (!node) return null;
+
+  const box = node.getBoundingClientRect();
+  const width  = box.width;
+  const height = box.height;
+
+  // Not rendered yet (hidden tab, or detached). Drawing now would produce
+  // garbage geometry AND waste a transition, so bail out cleanly. The chart
+  // is redrawn when the view becomes visible.
+  if (width < 40 || height < 40) return null;
+
+  const m = { ...margin };                 // copy: never mutate the caller's object
+  const horizontal = m.left + m.right;
+
+  // Leave at least 55% of the width for the actual data.
+  const maxHorizontal = width * 0.45;
+  if (horizontal > maxHorizontal) {
+    const shrink = maxHorizontal / horizontal;
+    m.left  = Math.max(28, Math.floor(m.left  * shrink));
+    m.right = Math.max(12, Math.floor(m.right * shrink));
+  }
+
+  return {
+    width, height, margin: m,
+    innerW: Math.max(1, width  - m.left - m.right),
+    innerH: Math.max(1, height - m.top  - m.bottom),
+  };
+}
+
+/* Belt and braces: any value handed to an SVG width/height goes through this,
+   so a future chart can never reintroduce the same console spam. */
+const px = (n) => (Number.isFinite(n) && n > 0 ? n : 0);
+
 const tooltip = () => $('#tooltip');
 
 function showTooltip(event, html) {
@@ -1150,6 +1279,9 @@ function drawDonutChart() {
   const box = svg.node().getBoundingClientRect();
   const width = box.width;
   const height = box.height;
+  // A hidden tab measures 0×0, and `0/2 - 8` is a NEGATIVE radius — d3.arc()
+  // then emits an invalid path. Bail out; the chart redraws when visible.
+  if (width < 40 || height < 40) return;
   const radius = Math.min(width, height) / 2 - 8;
 
   // Move the origin to the centre — arcs are drawn around (0,0).
@@ -1234,14 +1366,11 @@ function drawVendorChart() {
   const vendors = (state.currentReport.top_vendors || []).slice(0, 8);
   if (!vendors.length) return;
 
-  const box = svg.node().getBoundingClientRect();
-  const width = box.width;
-  const height = box.height;
-
-  // Left margin is generous because vendor names are long.
-  const margin = { top: 8, right: 40, bottom: 24, left: 130 };
-  const innerW = width - margin.left - margin.right;
-  const innerH = height - margin.top - margin.bottom;
+  // Left margin is generous because vendor names are long — but chartFrame()
+  // shrinks it on narrow screens instead of letting it eat the whole chart.
+  const frame = chartFrame(svg, { top: 8, right: 40, bottom: 24, left: 130 });
+  if (!frame) return;
+  const { margin, innerW, innerH } = frame;
 
   const g = svg.append('g')
     .attr('transform', `translate(${margin.left}, ${margin.top})`);
@@ -1284,7 +1413,7 @@ function drawVendorChart() {
     .transition()
       .duration(600)
       .delay((d, i) => i * 45)           // stagger, so bars appear in sequence
-      .attr('width', (d) => x(d.occurrences));
+      .attr('width', (d) => px(x(d.occurrences)));
 
   // Value labels at the end of each bar.
   g.selectAll('.bar-label')
@@ -1892,14 +2021,13 @@ function drawJurisdictionChart() {
   const countries = (state.currentReport.data_flows?.countries || []).slice(0, 10);
   if (!countries.length) return;
 
-  const box = svg.node().getBoundingClientRect();
-  const width = box.width;
-  const height = Math.max(160, countries.length * 30 + 40);
-  svg.attr('height', height);
+  // Height is data-driven here (one row per country), so it's set BEFORE
+  // measuring — chartFrame() then reads the height we just applied.
+  svg.attr('height', Math.max(160, countries.length * 30 + 40));
 
-  const margin = { top: 6, right: 60, bottom: 24, left: 140 };
-  const innerW = width - margin.left - margin.right;
-  const innerH = height - margin.top - margin.bottom;
+  const frame = chartFrame(svg, { top: 6, right: 60, bottom: 24, left: 140 });
+  if (!frame) return;
+  const { margin, innerW, innerH } = frame;
 
   const g = svg.append('g')
     .attr('transform', `translate(${margin.left}, ${margin.top})`);
@@ -1932,7 +2060,7 @@ function drawJurisdictionChart() {
             d.vendor_count > d.vendors.length ? '…' : ''}</span>`))
       .on('mouseleave', hideTooltip)
     .transition().duration(650).delay((d, i) => i * 40)
-      .attr('width', (d) => Math.max(2, x(d.cookie_count)));
+      .attr('width', (d) => Math.max(2, px(x(d.cookie_count))));
 
   g.selectAll('.jur-label')
     .data(countries)
@@ -1962,12 +2090,9 @@ function drawLifetimeChart() {
   const buckets = state.currentReport.lifetime_buckets || [];
   if (!buckets.length || buckets.every((b) => b.count === 0)) return;
 
-  const box = svg.node().getBoundingClientRect();
-  const width = box.width;
-  const height = box.height;
-  const margin = { top: 10, right: 8, bottom: 52, left: 34 };
-  const innerW = width - margin.left - margin.right;
-  const innerH = height - margin.top - margin.bottom;
+  const frame = chartFrame(svg, { top: 10, right: 8, bottom: 52, left: 34 });
+  if (!frame) return;
+  const { margin, innerW, innerH } = frame;
 
   const g = svg.append('g')
     .attr('transform', `translate(${margin.left}, ${margin.top})`);
@@ -2031,95 +2156,70 @@ function drawLifetimeChart() {
 /* ---- CHART 6: security gauges ------------------------------------------ */
 
 function renderSecurityGauges() {
-  const sp = state.currentReport.security_posture || {};
-  const container = $('#security-gauges');
-  if (!container) return;
+  const sp = state.currentReport?.security_posture || {};
+  const el = $('#security-metrics');
+  if (!el) return;
 
-  const gauges = [
+  const total = sp.total || 0;
+
+  /*
+    Design B's format, and it is strictly better than the radial gauges it
+    replaces. A gauge shows a PERCENTAGE. A metric row shows the percentage
+    AND the counts AND what the flag means:
+
+        Secure          19/38   50%
+        ──────────────────
+        Sent only over HTTPS
+
+    A compliance officer has to put numbers in a report. "50%" isn't
+    quotable; "19 of 38" is.
+  */
+  const rows = [
     {
-      id: 'g-secure', pct: sp.secure_pct ?? 0, label: 'Secure',
-      sub: `${sp.secure_count ?? 0} of ${sp.total ?? 0}`,
+      name: 'Secure',
+      count: sp.secure_count ?? 0,
+      pct: sp.secure_pct ?? 0,
       good: true,
-      tip: 'Sent only over HTTPS. Higher is better.',
+      note: 'Sent only over HTTPS, never plain HTTP.',
     },
     {
-      id: 'g-httponly', pct: sp.http_only_pct ?? 0, label: 'HttpOnly',
-      sub: `${sp.http_only_count ?? 0} of ${sp.total ?? 0}`,
+      name: 'HttpOnly',
+      count: sp.http_only_count ?? 0,
+      pct: sp.http_only_pct ?? 0,
       good: true,
-      tip: 'Hidden from JavaScript, which protects against XSS. Higher is better.',
+      note: 'Hidden from JavaScript, which protects session tokens against XSS.',
     },
     {
-      id: 'g-crosssite',
-      pct: sp.total ? Math.round(100 * (sp.cross_site_tracker_count ?? 0) / sp.total) : 0,
-      label: 'Cross-site',
-      sub: `${sp.cross_site_tracker_count ?? 0} trackers`,
-      good: false,      // for this one, LOWER is better
-      tip: 'Third-party AND SameSite=None — built for cross-site tracking. Lower is better.',
+      name: 'Cross-site (SameSite=None)',
+      count: sp.cross_site_tracker_count ?? 0,
+      pct: total ? Math.round(100 * (sp.cross_site_tracker_count ?? 0) / total) : 0,
+      good: false,          // for this one, LOWER is better
+      note: 'Third-party AND SameSite=None — the strongest technical signal of '
+          + 'cross-site tracking behaviour.',
     },
   ];
 
-  container.innerHTML = gauges.map((g) => `
-    <div class="gauge" title="${esc(g.tip)}">
-      <svg id="${g.id}" viewBox="0 0 120 120"></svg>
-      <div class="gauge-label">${esc(g.label)}</div>
-      <div class="gauge-sub">${esc(g.sub)}</div>
-    </div>`).join('');
-
-  gauges.forEach(drawGauge);
-}
-
-function drawGauge(cfg) {
-  if (!d3Available()) return;
-  const svg = d3.select('#' + cfg.id);
-  svg.selectAll('*').remove();
-
-  const R = 46, THICK = 11;
-  const g = svg.append('g').attr('transform', 'translate(60, 60)');
-
-  /*
-    A radial gauge is just two arcs stacked: a full grey track, and a
-    coloured arc covering `pct` of it.
-
-    Angles in D3 are RADIANS, measured clockwise from 12 o'clock.
-    A full circle is 2π. So `endAngle = 2π × (pct / 100)`.
-  */
-  const arc = d3.arc().innerRadius(R - THICK).outerRadius(R).cornerRadius(THICK / 2);
-
-  // Track.
-  g.append('path')
-    .attr('d', arc({ startAngle: 0, endAngle: 2 * Math.PI }))
-    .attr('fill', cssVar('--border'));
-
-  // For "good" metrics high is green; for the cross-site count it's reversed.
-  const value = cfg.good ? cfg.pct : 100 - cfg.pct;
-  const colour = value >= 70 ? cssVar('--necessary')
-               : value >= 40 ? cssVar('--analytics')
-               : cssVar('--marketing');
-
-  const fg = g.append('path').attr('fill', colour);
-
-  /*
-    ANIMATING AN ARC needs a TWEEN, because you can't interpolate the SVG path
-    STRING directly — halfway between two path strings is meaningless.
-
-    Instead we interpolate the ANGLE (a number), and regenerate the path on
-    every frame. `attrTween` gives D3 a function that returns the value for
-    each step of the transition.
-  */
-  const target = 2 * Math.PI * (cfg.pct / 100);
-  fg.transition().duration(750)
-    .attrTween('d', () => {
-      const interpolate = d3.interpolate(0, target);
-      return (t) => arc({ startAngle: 0, endAngle: interpolate(t) });
-    });
-
-  g.append('text')
-    .attr('text-anchor', 'middle')
-    .attr('dy', '0.35em')
-    .style('font-size', '1.35rem')
-    .style('font-weight', '700')
-    .style('fill', cssVar('--text'))
-    .text(`${Math.round(cfg.pct)}%`);
+  el.innerHTML = rows.map((r) => {
+    // For "good" metrics a high value is green; for cross-site it's inverted.
+    const quality = r.good ? r.pct : 100 - r.pct;
+    const colour = quality >= 70 ? 'var(--necessary)'
+                 : quality >= 40 ? 'var(--analytics)'
+                 : 'var(--marketing)';
+    return `
+      <div class="metric-row">
+        <div class="metric-head">
+          <span class="metric-name">${esc(r.name)}</span>
+          <span class="metric-figures">
+            <span class="metric-count">${r.count}</span><span class="metric-total">/${total}</span>
+            <span class="metric-pct">${r.pct}%</span>
+          </span>
+        </div>
+        <div class="metric-track">
+          <div class="metric-fill" style="width:${Math.min(100, r.pct)}%;background:${colour}"></div>
+        </div>
+        <div class="metric-note">${esc(r.note)}</div>
+      </div>`;
+  }).join('');
 }
 
 
@@ -2137,6 +2237,7 @@ function drawTreemap() {
   const box = svg.node().getBoundingClientRect();
   const width = box.width;
   const height = 320;
+  if (width < 40) return;          // not laid out yet — see chartFrame()
 
   /*
     A TREEMAP fills a rectangle with sub-rectangles whose AREA is proportional
@@ -2163,8 +2264,12 @@ function drawTreemap() {
     .attr('width', (d) => d.x1 - d.x0)
     .attr('height', (d) => d.y1 - d.y0)
     .attr('rx', 3)
-    .attr('fill', (d) => CATEGORY_COLORS[d.data.category] || cssVar('--unknown'))
-    .attr('fill-opacity', 0.88)
+    // Design B uses a violet family here rather than category colours. The
+    // treemap's job is showing REQUEST VOLUME, and a single-hue ramp reads as
+    // "more/less" far better than five unrelated hues, which read as
+    // "different kinds".
+    .attr('fill', (d, i) => cssVar(`--chart-${(i % 5) + 1}`))
+    .attr('fill-opacity', 0.95)
     .style('cursor', 'pointer')
     .on('mousemove', (event, d) => showTooltip(event, `
         <strong>${esc(d.data.domain)}</strong>
@@ -2180,19 +2285,31 @@ function drawTreemap() {
     produces overlapping mush — leaving it out and relying on the tooltip is
     the better design.
   */
+  // Domain name...
   leaf.append('text')
-    .attr('x', 6)
-    .attr('y', 16)
-    .style('font-size', '11px')
-    .style('font-weight', '600')
+    .attr('x', 10).attr('y', 20)
+    .style('font-size', '12px')
+    .style('font-weight', '700')
+    .style('font-family', 'var(--font-mono)')
     .style('fill', '#fff')
     .text((d) => {
       const w = d.x1 - d.x0, h = d.y1 - d.y0;
-      if (w < 60 || h < 24) return '';
-      // Trim "www." and truncate to roughly what fits.
+      if (w < 74 || h < 34) return '';
       const name = d.data.domain.replace(/^www\./, '');
-      const maxChars = Math.floor(w / 6.5);
+      const maxChars = Math.floor(w / 7);
       return name.length > maxChars ? name.slice(0, maxChars - 1) + '…' : name;
+    });
+
+  // ...and the request count beneath it, Design B style.
+  leaf.append('text')
+    .attr('x', 10).attr('y', 36)
+    .style('font-size', '11px')
+    .style('fill', '#fff')
+    .style('fill-opacity', .8)
+    .text((d) => {
+      const w = d.x1 - d.x0, h = d.y1 - d.y0;
+      if (w < 74 || h < 46) return '';
+      return `${d.data.request_count} req`;
     });
 }
 
@@ -2211,12 +2328,9 @@ function drawHistoryChart() {
   show($('#history-empty'), history.length < 2);
   if (history.length < 2) return;
 
-  const box = svg.node().getBoundingClientRect();
-  const width = box.width;
-  const height = box.height;
-  const margin = { top: 16, right: 20, bottom: 34, left: 42 };
-  const innerW = width - margin.left - margin.right;
-  const innerH = height - margin.top - margin.bottom;
+  const frame = chartFrame(svg, { top: 16, right: 20, bottom: 34, left: 42 });
+  if (!frame) return;
+  const { margin, innerW, innerH } = frame;
 
   const g = svg.append('g')
     .attr('transform', `translate(${margin.left}, ${margin.top})`);
@@ -2310,6 +2424,248 @@ function drawHistoryChart() {
 
 
 /* ==========================================================================
+   9b. CONSENT BANNER CONFIGURATOR
+   ==========================================================================
+   The single best product idea in either mockup. It turns the banner from
+   "a file in a repo" into something a site owner could actually adopt:
+   configure it, see it, copy the snippet.
+
+   Everything lives in one `bannerConfig` object and one `renderPreview()`.
+   Any control writes to the object then calls the renderer — so there is
+   exactly ONE place that knows how the preview looks, and adding a control
+   never means touching the drawing code.
+   ========================================================================== */
+
+const bannerConfig = {
+  color: '#4f46e5',
+  position: 'bottom',
+  overlay: true,
+  details: false,
+  title: 'We use cookies',
+  body: 'Necessary cookies keep this site working. Everything else stays '
+      + 'blocked until you say yes.',
+  policy: 'https://example.com/privacy',
+  expiryDays: 180,
+  previewState: 'first',
+};
+
+const SWATCHES = ['#4f46e5', '#7c3aed', '#0f766e', '#1e293b', '#dc2626', '#ea580c'];
+
+function initConsentConfigurator() {
+  // Colour swatches
+  $('#cfg-swatches').innerHTML = SWATCHES.map((c, i) => `
+    <button class="swatch ${i === 0 ? 'swatch-active' : ''}"
+            style="background:${c}" data-color="${c}"
+            aria-label="Brand colour ${c}"></button>`).join('');
+
+  $('#cfg-swatches').onclick = (e) => {
+    const sw = e.target.closest('[data-color]');
+    if (!sw) return;
+    bannerConfig.color = sw.dataset.color;
+    $('#cfg-color').value = sw.dataset.color;
+    $$('#cfg-swatches .swatch').forEach((s) =>
+      s.classList.toggle('swatch-active', s === sw));
+    renderBannerPreview();
+  };
+
+  $('#cfg-color').oninput = (e) => {
+    // Only accept a complete hex value — otherwise the preview flickers to
+    // black while you're still typing the second character.
+    if (/^#[0-9a-fA-F]{6}$/.test(e.target.value)) {
+      bannerConfig.color = e.target.value;
+      renderBannerPreview();
+    }
+  };
+
+  // Segmented controls. One handler for both, keyed by which dataset field
+  // the buttons carry.
+  const wireSegmented = (id, key, attr, cast = (v) => v) => {
+    $(id).onclick = (e) => {
+      const btn = e.target.closest(`[data-${attr}]`);
+      if (!btn) return;
+      bannerConfig[key] = cast(btn.dataset[attr]);
+      $$(`${id} .segment`).forEach((b) =>
+        b.classList.toggle('segment-active', b === btn));
+      renderBannerPreview();
+    };
+  };
+  wireSegmented('#cfg-position', 'position', 'pos');
+  wireSegmented('#cfg-expiry', 'expiryDays', 'days', Number);
+
+  // Text inputs and toggles
+  const bind = (id, key, prop = 'value') => {
+    $(id)[prop === 'checked' ? 'onchange' : 'oninput'] = (e) => {
+      bannerConfig[key] = e.target[prop];
+      renderBannerPreview();
+    };
+  };
+  bind('#cfg-title', 'title');
+  bind('#cfg-body', 'body');
+  bind('#cfg-policy', 'policy');
+  bind('#cfg-overlay', 'overlay', 'checked');
+  bind('#cfg-details', 'details', 'checked');
+
+  $('#preview-tabs').onclick = (e) => {
+    const tab = e.target.closest('[data-state]');
+    if (!tab) return;
+    bannerConfig.previewState = tab.dataset.state;
+    $$('#preview-tabs .preview-tab').forEach((t) =>
+      t.classList.toggle('preview-tab-active', t === tab));
+    renderBannerPreview();
+  };
+
+  $('#copy-snippet').onclick = async () => {
+    try {
+      // The Clipboard API is async and requires a secure context (https or
+      // localhost). It can also be denied, so this must be guarded.
+      await navigator.clipboard.writeText($('#cfg-snippet').textContent);
+      const btn = $('#copy-snippet');
+      btn.textContent = '✓ Copied';
+      setTimeout(() => { btn.textContent = 'Copy snippet'; }, 1800);
+    } catch (err) {
+      alert('Could not copy automatically — select the snippet and copy it manually.');
+    }
+  };
+
+  renderBannerPreview();
+}
+
+function renderBannerPreview() {
+  const c = bannerConfig;
+  const stage = $('#preview-stage');
+  if (!stage) return;
+
+  // Skeleton page content, so the banner is judged in context rather than
+  // floating in a void.
+  const skeleton = [92, 74, 97, 85, 95, 80, 88].map((w) =>
+    `<div class="skeleton-line" style="width:${w}%"></div>`).join('');
+
+  let banner = '';
+
+  if (c.previewState === 'withdrawn') {
+    banner = `
+      <div class="preview-banner" style="border-top-color:${esc(c.color)}">
+        <h4>🍪 Preferences saved</h4>
+        <p>
+          The visitor has made a choice. A permanently visible button lets
+          them change it — <strong>withdrawing consent must be as easy as
+          giving it</strong>.
+        </p>
+        <div class="preview-actions">
+          <span class="btn btn-ghost" style="pointer-events:none">🍪 Cookie preferences</span>
+        </div>
+      </div>`;
+  } else if (c.previewState === 'details' || c.details) {
+    const cats = [
+      ['Strictly necessary', 'Login, security, shopping cart.', true],
+      ['Functional', 'Language, region, theme.', false],
+      ['Analytics', 'Visits, popular pages, errors.', false],
+      ['Marketing', 'Advertising and cross-site profiling.', false],
+    ];
+    banner = `
+      <div class="preview-banner pos-${esc(c.position)}"
+           style="border-top-color:${esc(c.color)}">
+        <h4>🍪 ${esc(c.title)}</h4>
+        ${cats.map(([name, desc, locked]) => `
+          <div class="toggle-row" style="margin-bottom:7px">
+            <span>
+              <div class="toggle-text">${esc(name)}</div>
+              <div class="toggle-hint">${esc(desc)}</div>
+            </span>
+            ${locked
+              ? `<span style="font-size:.72rem;font-weight:700;color:var(--necessary)">ALWAYS ON</span>`
+              : `<span class="switch"><input type="checkbox" disabled>
+                   <span class="switch-track"></span></span>`}
+          </div>`).join('')}
+        <div class="preview-actions" style="margin-top:14px">
+          <span class="btn" style="background:${esc(c.color)};color:#fff;pointer-events:none">Reject all</span>
+          <span class="btn" style="background:${esc(c.color)};color:#fff;pointer-events:none">Accept all</span>
+          <span class="btn btn-ghost" style="pointer-events:none">Save my choices</span>
+        </div>
+      </div>`;
+  } else {
+    banner = `
+      <div class="preview-banner pos-${esc(c.position)}"
+           style="border-top-color:${esc(c.color)}">
+        <h4>🍪 ${esc(c.title)}</h4>
+        <p>
+          ${esc(c.body)}
+          ${c.policy ? ` <a href="#" style="color:${esc(c.color)}">Privacy policy</a>.` : ''}
+        </p>
+        <div class="preview-actions">
+          <!-- ⚠ Reject and Accept are rendered IDENTICALLY. This is the rule
+               CNIL fined Google €150m and Facebook €60m over — refusing must
+               be exactly as easy as accepting. -->
+          <span class="btn" style="background:${esc(c.color)};color:#fff;pointer-events:none">Reject all</span>
+          <span class="btn" style="background:${esc(c.color)};color:#fff;pointer-events:none">Accept all</span>
+          <span class="btn btn-ghost" style="pointer-events:none">Customise</span>
+        </div>
+      </div>`;
+  }
+
+  stage.innerHTML = skeleton + banner;
+  stage.style.background = c.overlay && c.previewState !== 'withdrawn'
+    ? 'color-mix(in oklch, var(--bg) 78%, black)'
+    : 'var(--bg)';
+
+  $('#cfg-snippet').textContent =
+`<script src="consent-banner.js"
+        data-accent-color="${c.color}"
+        data-position="${c.position}"
+        data-expiry-days="${c.expiryDays}"
+        data-policy-url="${c.policy}"></script>`;
+}
+
+
+/* ==========================================================================
+   9c. SETTINGS
+   ========================================================================== */
+
+const ENDPOINTS = [
+  ['GET', '/health', 'Backend liveness and database probe'],
+  ['POST', '/api/scan', 'Run a real-browser scan (optionally with consent diff)'],
+  ['GET', '/api/domains', 'List every scanned domain'],
+  ['GET', '/api/domains/{domain}/scans', 'Scan history for one domain'],
+  ['GET', '/api/domains/{domain}/latest', 'Most recent scan, full detail'],
+  ['GET', '/api/scans', 'Scan history across all domains, filterable'],
+  ['GET', '/api/scans/{id}', 'Single scan with cookies and third parties'],
+  ['GET', '/api/scans/{id}/cookies', 'Cookie inventory for one scan'],
+  ['DELETE', '/api/scans/{id}', 'Delete a scan (cascades to its cookies)'],
+  ['GET', '/api/report/{domain}', 'Compliance report, vendors, trend, data flows'],
+  ['GET', '/api/report/{domain}/pdf', 'Download the audit report as a PDF'],
+];
+
+function renderSettings(healthy, health) {
+  $('#endpoints-tbody').innerHTML = ENDPOINTS.map(([method, path, purpose]) => `
+    <tr>
+      <td><span class="method-badge method-${method}">${method}</span></td>
+      <td class="mono">${esc(path)}</td>
+      <td class="muted">${esc(purpose)}</td>
+    </tr>`).join('');
+
+  $('#settings-base-url').textContent = API_BASE;
+
+  $('#settings-status').innerHTML = healthy
+    ? `<div class="status-card status-card-ok">
+         <h4 style="color:var(--necessary)">● Live API connected</h4>
+         <p>
+           The FastAPI backend is reachable. Scans use the real
+           Playwright-powered browser engine.
+           ${health ? `<br><strong>${health.domains_tracked}</strong> domains ·
+             <strong>${health.scans_stored}</strong> scans stored.` : ''}
+         </p>
+       </div>`
+    : `<div class="status-card status-card-fail">
+         <h4 style="color:var(--analytics)">● Backend unreachable</h4>
+         <p>
+           Nothing on this dashboard is live. Start the API with
+           <code>uvicorn api.main:app --reload</code>.
+         </p>
+       </div>`;
+}
+
+
+/* ==========================================================================
    10. TABS AND WIRING
    ========================================================================== */
 
@@ -2317,16 +2673,22 @@ function switchView(name) {
   $$('.view').forEach((v) => v.classList.remove('view-active'));
   $(`#view-${name}`).classList.add('view-active');
 
-  $$('.tab').forEach((t) => {
+  $$('.nav-item').forEach((t) => {
     const active = t.dataset.view === name;
-    t.classList.toggle('tab-active', active);
+    t.classList.toggle('nav-item-active', active);
     t.setAttribute('aria-selected', String(active));
   });
+
+  // Close the mobile drawer after choosing a destination.
+  $('#main-nav').classList.remove('open');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
 
   // Charts measure the SVG's rendered width. A hidden element has width 0, so
   // charts drawn while the tab was hidden come out wrong. Redraw on show.
   if (name === 'report' && state.currentReport) redrawCharts();
   if (name === 'history') { populateHistoryFilters(); loadHistory(); }
+  if (name === 'settings') { checkHealth().then((ok) => renderSettings(ok, state.health)); }
+  if (name === 'consent') renderBannerPreview();
 }
 
 /*
@@ -2350,9 +2712,10 @@ function debounce(fn, ms) {
 }
 
 function wireEvents() {
-  $$('.tab').forEach((tab) => {
-    tab.onclick = () => switchView(tab.dataset.view);
+  $$('.nav-item, .brand').forEach((el) => {
+    el.onclick = () => switchView(el.dataset.view);
   });
+  $('#nav-toggle').onclick = () => $('#main-nav').classList.toggle('open');
 
   $('#scan-form').onsubmit = handleScanSubmit;
   $('#refresh-domains').onclick = loadDomains;
@@ -2360,6 +2723,10 @@ function wireEvents() {
 
   // ---- scan history ----
   $('#history-refresh').onclick = loadHistory;
+  $('#recheck-api').onclick = async () => {
+    const ok = await checkHealth();
+    renderSettings(ok, state.health);
+  };
   $('#history-domain-filter').onchange = (e) => {
     historyState.domain = e.target.value;
     historyState.page = 0;          // a new filter means a new result set
@@ -2422,6 +2789,7 @@ function wireEvents() {
 async function init() {
   initTheme();      // BEFORE anything draws, so charts pick up the right colours
   wireEvents();
+  initConsentConfigurator();
 
   const healthy = await checkHealth();
   if (!healthy) return;      // the error banner is already showing

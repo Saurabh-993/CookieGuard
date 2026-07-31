@@ -36,115 +36,138 @@
    exactly — one source of truth for colour.
    ========================================================================== */
 
+/* ---------------------------------------------------------------------------
+   DESIGN B TOKENS
+   ---------------------------------------------------------------------------
+   Monochrome chrome, semantic data colour.
+
+   The key idea: BLACK carries the interface (buttons, active states, text),
+   and colour is reserved ENTIRELY for meaning — category, grade, region. When
+   the chrome is neutral, a red badge genuinely means "look here". When the
+   chrome is also coloured, red is just another colour on the page.
+
+   That's why Design B reads as more professional than a coloured shell: it
+   spends its colour budget on data instead of decoration.
+   --------------------------------------------------------------------------- */
+
 :root {
-  /* Brand */
-  --brand:          #4f46e5;
-  --brand-dark:     #3730a3;
-  --brand-light:    #eef2ff;
+  /* ---- Typography ---- */
+  /* Space Grotesk approximates Design B's geometric sans (Porsche Next, which
+     is proprietary). Squarish terminals, distinctive 'g' and 'a' — the same
+     technical-but-not-cold feel. */
+  --font-sans: "Space Grotesk", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
 
-  /* Compliance categories — ordered least to most concerning */
-  --necessary:      #059669;   /* green  — exempt from consent */
-  --functional:     #0284c7;   /* blue   — consent required */
-  --analytics:      #d97706;   /* amber  — consent required */
-  --marketing:      #dc2626;   /* red    — highest scrutiny */
-  --unknown:        #6b7280;   /* grey   — needs human review */
+  /* ---- Chrome: monochrome ---- */
+  --brand:          oklch(0.16 0.006 265);    /* near-black — buttons, active */
+  --brand-dark:     oklch(0.08 0.004 265);
+  --brand-light:    oklch(0.955 0.002 255);   /* the "selected" wash */
+  --violet:         oklch(0.55 0.21 285);     /* charts only */
 
-  /* Neutrals */
-  --bg:             #f8fafc;
-  --surface:        #ffffff;
-  --border:         #e2e8f0;
-  --text:           #0f172a;
-  --text-muted:     #64748b;
+  /* ---- Data colour: the ONLY place hue is spent ---- */
+  --necessary:      oklch(0.58 0.15 156);
+  --functional:     oklch(0.56 0.15 250);
+  --analytics:      oklch(0.72 0.16 70);
+  --marketing:      oklch(0.58 0.21 25);
+  --unknown:        oklch(0.62 0.012 258);
 
-  /* Grades */
-  --grade-a:        #059669;
-  --grade-b:        #65a30d;
-  --grade-c:        #d97706;
-  --grade-d:        #ea580c;
-  --grade-f:        #dc2626;
+  /* ---- Surfaces ---- */
+  --bg:             oklch(1 0 0);             /* page is WHITE in Design B */
+  --surface:        oklch(0.968 0.001 255);   /* cards are light GREY */
+  --surface-2:      oklch(0.945 0.002 255);
+  --border:         oklch(0.906 0.002 255);
+  --border-strong:  oklch(0.84 0.003 255);
+  --text:           oklch(0.16 0.006 265);
+  --text-muted:     oklch(0.48 0.008 258);
 
-  /* Jurisdiction regions (GDPR transfer risk) */
-  --region-eea:        #059669;   /* data stays in scope */
-  --region-adequate:   #0284c7;   /* adequacy decision — permitted */
-  --region-dpf:        #d97706;   /* US, under active legal challenge */
-  --region-restricted: #dc2626;   /* needs SCCs + impact assessment */
+  --grade-a:        oklch(0.58 0.15 156);
+  --grade-b:        oklch(0.60 0.15 145);
+  --grade-c:        oklch(0.72 0.16 70);
+  --grade-d:        oklch(0.66 0.17 45);
+  --grade-f:        oklch(0.58 0.21 25);
 
-  --radius:         10px;
-  --shadow:         0 1px 3px rgba(15, 23, 42, .08);
-  --shadow-lg:      0 4px 16px rgba(15, 23, 42, .10);
+  --success-soft:   oklch(0.945 0.05 157);
+  --warning-soft:   oklch(0.958 0.055 85);
+  --danger-soft:    oklch(0.948 0.035 25);
+  --info-soft:      oklch(0.948 0.03 250);
+  --neutral-soft:   oklch(0.938 0.002 255);
+
+  --region-eea:        oklch(0.58 0.15 156);
+  --region-adequate:   oklch(0.56 0.15 250);
+  --region-dpf:        oklch(0.72 0.16 70);
+  --region-restricted: oklch(0.58 0.21 25);
+
+  /* Chart palette — violet family, matching Design B's treemap. */
+  --chart-1: oklch(0.55 0.21 285);
+  --chart-2: oklch(0.63 0.19 288);
+  --chart-3: oklch(0.45 0.20 300);
+  --chart-4: oklch(0.68 0.17 292);
+  --chart-5: oklch(0.38 0.18 300);
+
+  --radius:         0.5rem;
+  --shadow:         0 1px 2px 0 oklch(0 0 0 / 0.04);
+  --shadow-lg:      0 12px 32px -12px oklch(0 0 0 / 0.22);
 }
 
 
 /* ==========================================================================
    1b. DARK THEME
    ==========================================================================
-   HOW THEMING WORKS HERE
-   ----------------------
-   We do NOT write a second copy of the stylesheet. We only redefine the
-   VARIABLES. Every rule below already says `var(--surface)` rather than a
-   literal colour, so overriding the variable re-themes the entire page.
-
-       [data-theme="dark"] { --bg: #0f172a; }
-
-   `[data-theme="dark"]` is an ATTRIBUTE SELECTOR — it matches whatever element
-   carries that attribute. app.js sets it on <html>, and because our variables
-   live on :root (which IS <html>), the override applies everywhere at once.
-
-   That's ~25 lines for a complete dark mode. If the colours had been
-   hardcoded throughout, this would have meant duplicating the whole file.
-
-   WHY THE CATEGORY COLOURS CHANGE TOO
-   -----------------------------------
-   A colour that has good contrast on white can be muddy on near-black. The
-   dark variants are lighter and more saturated so they stay legible — this is
-   accessibility, not taste. WCAG asks for 4.5:1 contrast for normal text.
+   Design B's dark mode is genuinely dark — near-black canvas, not navy.
+   Chrome inverts (white becomes the "primary"), data colours lift for
+   contrast. Same rule holds: colour still means something.
    ========================================================================== */
 
 [data-theme="dark"] {
-  --bg:             #0b1120;
-  --surface:        #151e33;
-  --border:         #263349;
-  --text:           #e6edf7;
-  --text-muted:     #94a3b8;
+  --brand:          oklch(0.97 0.001 255);    /* inverted: white is primary */
+  --brand-dark:     oklch(0.88 0.002 255);
+  --brand-light:    oklch(0.25 0.004 265);
 
-  --brand:          #818cf8;
-  --brand-dark:     #6366f1;
-  --brand-light:    #1e2544;
+  --necessary:      oklch(0.72 0.16 157);
+  --functional:     oklch(0.70 0.15 250);
+  --analytics:      oklch(0.80 0.15 78);
+  --marketing:      oklch(0.70 0.18 25);
+  --unknown:        oklch(0.66 0.012 258);
 
-  /* Lightened for contrast against a dark background */
-  --necessary:      #34d399;
-  --functional:     #38bdf8;
-  --analytics:      #fbbf24;
-  --marketing:      #f87171;
-  --unknown:        #94a3b8;
+  --bg:             oklch(0.145 0.004 265);
+  --surface:        oklch(0.196 0.005 265);
+  --surface-2:      oklch(0.245 0.006 265);
+  --border:         oklch(1 0 0 / 11%);
+  --border-strong:  oklch(1 0 0 / 20%);
+  --text:           oklch(0.97 0.001 255);
+  --text-muted:     oklch(0.68 0.008 258);
 
-  --grade-a:        #34d399;
-  --grade-b:        #a3e635;
-  --grade-c:        #fbbf24;
-  --grade-d:        #fb923c;
-  --grade-f:        #f87171;
+  --grade-a:        oklch(0.72 0.16 157);
+  --grade-b:        oklch(0.75 0.16 145);
+  --grade-c:        oklch(0.80 0.15 78);
+  --grade-d:        oklch(0.74 0.16 45);
+  --grade-f:        oklch(0.70 0.18 25);
 
-  --region-eea:        #34d399;
-  --region-adequate:   #38bdf8;
-  --region-dpf:        #fbbf24;
-  --region-restricted: #f87171;
+  --success-soft:   oklch(0.28 0.06 157);
+  --warning-soft:   oklch(0.30 0.06 78);
+  --danger-soft:    oklch(0.28 0.07 25);
+  --info-soft:      oklch(0.27 0.06 250);
+  --neutral-soft:   oklch(0.26 0.004 258);
 
-  --shadow:         0 1px 3px rgba(0, 0, 0, .4);
-  --shadow-lg:      0 4px 20px rgba(0, 0, 0, .5);
+  --region-eea:        oklch(0.72 0.16 157);
+  --region-adequate:   oklch(0.70 0.15 250);
+  --region-dpf:        oklch(0.80 0.15 78);
+  --region-restricted: oklch(0.70 0.18 25);
+
+  --chart-1: oklch(0.66 0.19 285);
+  --chart-2: oklch(0.73 0.17 288);
+  --chart-3: oklch(0.58 0.19 300);
+  --chart-4: oklch(0.78 0.14 292);
+  --chart-5: oklch(0.50 0.18 300);
+
+  --shadow:         0 1px 3px oklch(0 0 0 / 45%);
+  --shadow-lg:      0 12px 32px -12px oklch(0 0 0 / 65%);
 }
 
 /* A few places use literal colours that must flip too. */
-[data-theme="dark"] code            { background: #1e293b; color: #cbd5e1; }
-[data-theme="dark"] .pill           { background: #1e293b; color: #94a3b8; }
-[data-theme="dark"] .pill-warn      { background: #422006; color: #fcd34d; }
-[data-theme="dark"] .tooltip        { background: #020617; border: 1px solid var(--border); }
-[data-theme="dark"] .alert-error    { background: #450a0a; border-color: #7f1d1d; color: #fca5a5; }
-[data-theme="dark"] .alert-success  { background: #052e16; border-color: #14532d; color: #86efac; }
-[data-theme="dark"] .alert-info     { background: #1e2544; border-color: #312e81; color: #c7d2fe; }
-[data-theme="dark"] .trend-improving { background: #052e16; color: #86efac; }
-[data-theme="dark"] .trend-worsening { background: #450a0a; color: #fca5a5; }
-[data-theme="dark"] .trend-stable    { background: #1e2544; color: #c7d2fe; }
-[data-theme="dark"] .trend-insufficient { background: #1e293b; color: #94a3b8; }
+/* Because the soft tints are now tokens too, dark mode needs almost no
+   per-element overrides — the badge backgrounds re-theme automatically. */
+[data-theme="dark"] .tooltip { background: oklch(0.15 0.02 265); border: 1px solid var(--border); }
 
 /*
   A colour-scheme-aware DEFAULT.
@@ -159,15 +182,26 @@
 */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme]) {
-    --bg: #0b1120;  --surface: #151e33;  --border: #263349;
-    --text: #e6edf7;  --text-muted: #94a3b8;
-    --brand: #818cf8;  --brand-dark: #6366f1;  --brand-light: #1e2544;
-    --necessary: #34d399;  --functional: #38bdf8;  --analytics: #fbbf24;
-    --marketing: #f87171;  --unknown: #94a3b8;
-    --grade-a: #34d399;  --grade-b: #a3e635;  --grade-c: #fbbf24;
-    --grade-d: #fb923c;  --grade-f: #f87171;
-    --region-eea: #34d399;  --region-adequate: #38bdf8;
-    --region-dpf: #fbbf24;  --region-restricted: #f87171;
+    --brand: oklch(0.97 0.001 255); --brand-dark: oklch(0.88 0.002 255);
+    --brand-light: oklch(0.25 0.004 265);
+    --necessary: oklch(0.72 0.16 157); --functional: oklch(0.70 0.15 250);
+    --analytics: oklch(0.80 0.15 78);  --marketing: oklch(0.70 0.18 25);
+    --unknown: oklch(0.66 0.012 258);
+    --bg: oklch(0.145 0.004 265); --surface: oklch(0.196 0.005 265);
+    --surface-2: oklch(0.245 0.006 265);
+    --border: oklch(1 0 0 / 11%); --border-strong: oklch(1 0 0 / 20%);
+    --text: oklch(0.97 0.001 255); --text-muted: oklch(0.68 0.008 258);
+    --grade-a: oklch(0.72 0.16 157); --grade-b: oklch(0.75 0.16 145);
+    --grade-c: oklch(0.80 0.15 78);  --grade-d: oklch(0.74 0.16 45);
+    --grade-f: oklch(0.70 0.18 25);
+    --success-soft: oklch(0.28 0.06 157); --warning-soft: oklch(0.30 0.06 78);
+    --danger-soft: oklch(0.28 0.07 25);   --info-soft: oklch(0.27 0.06 250);
+    --neutral-soft: oklch(0.26 0.004 258);
+    --region-eea: oklch(0.72 0.16 157); --region-adequate: oklch(0.70 0.15 250);
+    --region-dpf: oklch(0.80 0.15 78);  --region-restricted: oklch(0.70 0.18 25);
+    --chart-1: oklch(0.66 0.19 285); --chart-2: oklch(0.73 0.17 288);
+    --chart-3: oklch(0.58 0.19 300); --chart-4: oklch(0.78 0.14 292);
+    --chart-5: oklch(0.50 0.18 300);
   }
 }
 
@@ -199,11 +233,10 @@ body, .card, .input, .tab, .chip, .data-table td, .data-table th {
 }
 
 body {
-  /* A "font stack": try each in order, use the first available. This one uses
-     whatever the operating system's own UI font is, so the page looks native
-     on Windows, macOS and Android without downloading anything. */
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
-               "Helvetica Neue", Arial, sans-serif;
+  /* Inter for UI, JetBrains Mono for anything technical (cookie names,
+     domains, code). Both fall back to the system font stack if the webfont
+     fails, so a blocked CDN costs polish rather than legibility. */
+  font-family: var(--font-sans);
   font-size: 15px;
   line-height: 1.55;          /* unitless = 1.55 × the element's own size */
   color: var(--text);
@@ -217,9 +250,9 @@ h2 { font-size: 1.1rem; }
 h3 { font-size: 1rem; }
 
 code {
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .85em;
-  background: #f1f5f9;
+  background: var(--neutral-soft);
   padding: 2px 6px;
   border-radius: 4px;
 }
@@ -230,108 +263,255 @@ code {
 
 
 /* ==========================================================================
-   3. HEADER
+   3. THE SHELL — header + navigation
+   ==========================================================================
+   A HYBRID, per the design review:
+     · centred nav with icons + labels           (Design B)
+     · indigo/violet colour system, light-first  (Design A)
+     · Live/Demo status pill + theme toggle      (both)
+
+   Design B put the nav in the CENTRE rather than left-aligned after the logo.
+   That's the better choice here: with five destinations, centring gives each
+   equal visual weight, and the eye lands on navigation first — right for a
+   tool you move around in constantly.
    ========================================================================== */
 
 .site-header {
-  background: linear-gradient(135deg, var(--brand) 0%, var(--brand-dark) 100%);
-  color: #fff;
-  padding: 18px 0;
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: var(--bg);          /* Design B: header matches the white page */
+  border-bottom: 1px solid var(--border);
 }
 
 .header-inner {
-  max-width: 1280px;
-  margin: 0 auto;          /* `0 auto` = no vertical margin, auto horizontal
-                              → equal left/right margins → centred */
-  padding: 0 24px;
-
-  /* FLEXBOX — lays children out in a row or column.
-     This is the single most common layout job: push one thing left, another
-     right, keep both vertically centred. */
-  display: flex;
-  justify-content: space-between;  /* main axis (horizontal): push apart */
-  align-items: center;             /* cross axis (vertical): centre */
-  gap: 16px;
-  flex-wrap: wrap;                 /* stack instead of overflow on narrow screens */
-}
-
-.brand { display: flex; align-items: center; gap: 12px; }
-.brand-icon { font-size: 2rem; }
-.tagline { font-size: .82rem; opacity: .85; }
-
-.api-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: .82rem;
-  background: rgba(255, 255, 255, .15);
-  padding: 6px 14px;
-  border-radius: 999px;      /* an absurdly large radius = a perfect pill */
-}
-
-.header-actions { display: flex; align-items: center; gap: 12px; }
-
-/* ---- Theme toggle ----
-   A single button that swaps its own icon. `aria-label` is what a screen
-   reader announces, since the icon alone means nothing to it. */
-.theme-toggle {
-  background: rgba(255, 255, 255, .15);
-  border: none;
-  color: #fff;
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  cursor: pointer;
-  font-size: 1rem;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background .15s, transform .15s;
-}
-.theme-toggle:hover { background: rgba(255, 255, 255, .28); transform: rotate(12deg); }
-
-.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.dot-ok      { background: #4ade80; }
-.dot-error   { background: #f87171; }
-.dot-pending { background: #fbbf24; }
-
-
-/* ==========================================================================
-   4. TABS
-   ========================================================================== */
-
-.tabs {
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  gap: 4px;
-  padding: 0 24px;
-  max-width: 1280px;
+  max-width: 1320px;
   margin: 0 auto;
-  overflow-x: auto;          /* scroll sideways on a phone rather than squash */
+  padding: 0 24px;
+  height: 60px;
+  display: grid;
+  /* `1fr auto 1fr` gives brand and actions equal space, so the nav sits at the
+     TRUE centre of the page — not merely the centre of what's left over. */
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 16px;
 }
 
-.tab {
+/* ---- Brand ---- */
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--text);
+  justify-self: start;
   background: none;
   border: none;
-  border-bottom: 3px solid transparent;   /* reserve the space now, so the
-                                             active state doesn't shift layout */
-  padding: 14px 18px;
-  font-size: .92rem;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+}
+
+.brand-mark {
+  width: 30px; height: 30px;
+  border-radius: 8px;
+  background: var(--brand);
+  /* On white the mark is black; in dark mode --brand inverts to white, so the
+     glyph must invert too. `--bg` is always the opposite of `--brand`. */
+  color: var(--bg);
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.brand-mark svg { width: 17px; height: 17px; }
+
+.brand-name {
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -.02em;
+  white-space: nowrap;
+}
+.brand-accent { color: var(--brand); }
+
+/* ---- Centre navigation ---- */
+.main-nav {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  justify-self: center;
+}
+
+.nav-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 13px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: none;
+  font-family: inherit;
+  font-size: .875rem;
   font-weight: 550;
   color: var(--text-muted);
   cursor: pointer;
   white-space: nowrap;
-  transition: color .15s, border-color .15s;
+  transition: color .15s, background .15s, border-color .15s;
+}
+.nav-item svg { width: 15px; height: 15px; flex-shrink: 0; }
+.nav-item:hover { color: var(--text); background: var(--surface-2); }
+
+/* The active tab gets a filled pill rather than an underline. With icons
+   present, a shape reads faster than a 2px line. */
+/* Design B's active state: a raised white pill with a border and a short
+   underline bar. The underline is what makes it read as a TAB rather than a
+   button — it anchors the pill to the content below it. */
+.nav-item-active {
+  color: var(--text);
+  background: var(--bg);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow);
+  position: relative;
+  font-weight: 600;
+}
+.nav-item-active::after {
+  content: "";
+  position: absolute;
+  left: 12px; right: 12px; bottom: -1px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--text);
 }
 
-.tab:hover { color: var(--text); }
+/* ---- Right-hand actions ---- */
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+}
 
-.tab-active {
+/* Live / Demo pill.
+   `color-mix()` blends two colours in a given colour space — here it derives a
+   soft border tint from the status colour, so adding a new status needs one
+   token rather than three. */
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: .76rem;
+  font-weight: 650;
+  white-space: nowrap;
+  border: 1px solid transparent;
+}
+.status-pill .dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+
+.status-live {
+  background: var(--success-soft); color: var(--necessary);
+  border-color: color-mix(in oklch, var(--necessary) 25%, transparent);
+}
+.status-live .dot { background: var(--necessary); }
+
+.status-demo {
+  background: var(--warning-soft); color: var(--analytics);
+  border-color: color-mix(in oklch, var(--analytics) 25%, transparent);
+}
+.status-demo .dot { background: var(--analytics); }
+
+.status-offline {
+  background: var(--danger-soft); color: var(--marketing);
+  border-color: color-mix(in oklch, var(--marketing) 25%, transparent);
+}
+.status-offline .dot { background: var(--marketing); }
+
+.theme-toggle,
+.nav-toggle {
+  width: 34px; height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  transition: background .15s, color .15s, border-color .15s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover,
+.nav-toggle:hover {
+  background: var(--surface-2); color: var(--text); border-color: var(--border-strong);
+}
+.theme-toggle svg, .nav-toggle svg { width: 16px; height: 16px; }
+
+.nav-toggle { display: none; }
+
+@media (max-width: 980px) {
+  .header-inner { grid-template-columns: auto 1fr; height: 56px; padding: 0 16px; }
+  .main-nav {
+    /* Becomes a drawer below the header rather than squeezing into the bar. */
+    display: none;
+    position: absolute; top: 100%; left: 0; right: 0;
+    flex-direction: column; align-items: stretch;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    padding: 10px; gap: 3px;
+    box-shadow: var(--shadow-lg);
+  }
+  .main-nav.open { display: flex; }
+  .nav-item { justify-content: flex-start; padding: 10px 14px; }
+  .nav-toggle { display: flex; }
+  .status-pill { display: none; }     /* reclaim space on a phone */
+}
+
+
+/* ==========================================================================
+   4. PAGE HEADER
+   ==========================================================================
+   Design A's eyebrow → title → description pattern. It tells a reader what a
+   screen is FOR before they parse its contents — worth the vertical space on
+   a tool with five distinct sections.
+   ========================================================================== */
+
+.page-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 22px;
+}
+
+.page-eyebrow {
+  font-size: .72rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
   color: var(--brand);
-  border-bottom-color: var(--brand);
+  margin-bottom: 5px;
 }
 
+.page-title {
+  font-size: 1.85rem;
+  font-weight: 700;
+  letter-spacing: -.025em;
+  line-height: 1.15;
+}
+
+.page-desc {
+  color: var(--text-muted);
+  font-size: .92rem;
+  margin-top: 5px;
+  max-width: 68ch;          /* ~68 characters is the readable line-length cap */
+}
+
+.demo-banner {
+  background: var(--warning-soft);
+  border-bottom: 1px solid color-mix(in oklch, var(--analytics) 30%, transparent);
+  color: var(--analytics);
+  font-size: .85rem;
+  padding: 10px 24px;
+  text-align: center;
+}
+.demo-banner strong { font-weight: 700; }
 
 /* ==========================================================================
    5. LAYOUT
@@ -348,13 +528,25 @@ code {
 .view          { display: none; }
 .view-active   { display: block; }
 
+/* Design B cards: a light grey PANEL with no border and no shadow.
+   On a white page, a subtle fill separates content more calmly than a border —
+   borders on every card produce a boxy, cluttered grid. */
 .card {
   background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
-  padding: 20px 22px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  padding: 22px 24px;
   margin-bottom: 20px;
+}
+
+/* Tables sit on the page background inside their grey card, so rows read
+   clearly against it. */
+.card .table-wrap {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  overflow-x: auto;
 }
 
 .card-head {
@@ -371,6 +563,97 @@ code {
    6. FORMS AND BUTTONS
    ========================================================================== */
 
+/* ---- Scan form (Design B architecture) ----
+   A labelled grid rather than a bare row of inputs. Explicit labels above
+   each field are more scannable than placeholders — and placeholders vanish
+   the moment you start typing, which is a genuine usability problem, not a
+   style preference. */
+
+/* ⚠ THE OVERLAP BUG, AND WHY IT HAPPENED
+   -----------------------------------------------------------------------
+   The button column was `auto`, meaning "as wide as the content". While
+   scanning, the label changes from "Scan website" to "Scanning…" AND a
+   spinner appears — so the content grew, but `auto` had already resolved
+   against the ORIGINAL text. The button overflowed into the select beside it.
+
+   Two fixes together:
+     · `minmax(170px, auto)` reserves enough room for the widest state
+     · a fixed `min-width` on the button itself, so its width never depends
+       on which label is currently showing
+
+   The general lesson: if an element's content CHANGES, sizing it by content
+   is a bug waiting for the longest string. Reserve for the widest state.
+   ----------------------------------------------------------------------- */
+/* ⚠ THE OVERLAP BUG, TAKE TWO — the real cause
+   -----------------------------------------------------------------------
+   Widening the button column did NOT fix it, because the button was never
+   the thing overflowing. The SELECT was.
+
+   `.input` carries `min-width: 200px` (it was written for the old flexbox
+   form, where inputs needed a floor so they didn't collapse). The wait-time
+   `<select>` also has class `input` — so it inherited a 200px floor while
+   sitting in a 170px grid track. A grid track cannot shrink an item below
+   its min-width, so the select simply painted 30px PAST its column, straight
+   underneath the button.
+
+   The lesson is about grid, and it is not obvious:
+     A grid track does not clip its contents. If an item's own min-width
+     exceeds the track, the item overflows into the next column — silently.
+     Grid children need `min-width: 0` to be genuinely shrinkable.
+
+   Fix is two lines: let the select shrink, and let the track breathe.
+   ----------------------------------------------------------------------- */
+.scan-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 180px) minmax(180px, auto);
+  gap: 14px;
+  align-items: start;
+  margin-top: 4px;
+}
+
+/* Every grid child may shrink to fit its track. Without this, ANY long
+   unbreakable content inside a field pushes the whole form wide. */
+.scan-form-grid > .field { min-width: 0; }
+
+/* The select must obey its column, not `.input`'s legacy 200px floor. */
+.field-narrow .input { min-width: 0; width: 100%; }
+
+.field-action .btn {
+  min-width: 180px;
+  justify-content: center;
+}
+
+.field { display: flex; flex-direction: column; }
+
+.field-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+}
+
+.field-hint {
+  font-size: .78rem;
+  color: var(--text-muted);
+  margin-top: 7px;
+}
+
+/* The button sits on the same baseline as the inputs, so it needs the label's
+   height plus its margin pushed in above it. */
+.field-action { padding-top: calc(.7rem * 1.4 + 7px); }
+
+.input-mono { font-family: var(--font-mono); font-size: .875rem; }
+
+.btn-lg { padding: 11px 22px; font-size: .92rem; }
+
+@media (max-width: 860px) {
+  .scan-form-grid { grid-template-columns: 1fr; }
+  .field-action { padding-top: 0; }
+  .field-action .btn { width: 100%; justify-content: center; }
+}
+
 .scan-form {
   display: flex;
   gap: 10px;
@@ -380,7 +663,9 @@ code {
 
 .input {
   flex: 1;                   /* grow to fill the leftover space */
-  min-width: 200px;          /* ...but never below this, or it collapses */
+  /* `min(200px, 100%)` not a bare 200px: on a narrow container the floor
+     becomes the container width instead of forcing an overflow. */
+  min-width: min(200px, 100%);
   padding: 10px 14px;
   font-size: .92rem;
   font-family: inherit;      /* inputs don't inherit body font by default */
@@ -414,15 +699,17 @@ code {
   transition: background .15s, border-color .15s;
 }
 
-.btn-primary { background: var(--brand); color: #fff; }
+/* Primary is BLACK, not coloured. Design B reserves hue for data. */
+.btn-primary { background: var(--brand); color: var(--bg); }
 .btn-primary:hover:not(:disabled) { background: var(--brand-dark); }
 
 .btn-ghost {
-  background: transparent;
-  border-color: var(--border);
-  color: var(--text-muted);
+  background: var(--bg);
+  border-color: var(--border-strong);
+  color: var(--text);
+  font-weight: 550;
 }
-.btn-ghost:hover { background: var(--bg); color: var(--text); }
+.btn-ghost:hover { background: var(--surface-2); border-color: var(--text-muted); }
 
 .btn-link {
   background: none;
@@ -475,29 +762,41 @@ code {
   font-size: .88rem;
 }
 
+/* Design B header: a filled grey band, not just a heavy underline. It reads
+   as a distinct region of the table rather than a first row. */
+.data-table thead { background: var(--surface); }
+
 .data-table th {
   text-align: left;
   font-weight: 600;
-  font-size: .74rem;
+  font-size: .72rem;
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: .06em;
   color: var(--text-muted);
-  padding: 10px 12px;
-  border-bottom: 2px solid var(--border);
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 
 .data-table td {
-  padding: 10px 12px;
+  padding: 13px 14px;
   border-bottom: 1px solid var(--border);
   vertical-align: middle;
 }
 
-.data-table tbody tr:hover { background: var(--bg); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+
+/* Zebra striping. With 177 CNN cookies, alternating rows are the difference
+   between scannable and unreadable — the eye needs a rail to follow. */
+.data-table tbody tr:nth-child(even) { background: var(--surface); }
+.data-table tbody tr:hover { background: var(--surface-2); }
 
 .mono {
-  font-family: ui-monospace, "Cascadia Code", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: .84em;
+  /* tabular-nums makes every digit the same width, so numbers in a column
+     line up instead of jittering. Essential in a data table. */
+  font-variant-numeric: tabular-nums;
 }
 
 .row-clickable { cursor: pointer; }
@@ -532,12 +831,12 @@ code {
   border-radius: 5px;
   font-size: .7rem;
   font-weight: 600;
-  background: #f1f5f9;
+  background: var(--neutral-soft);
   color: var(--text-muted);
   margin-right: 4px;
 }
 
-.pill-warn { background: #fef3c7; color: #92400e; }
+.pill-warn { background: var(--warning-soft); color: var(--analytics); }
 
 .filter-bar {
   display: flex;
@@ -571,6 +870,114 @@ code {
 
 
 /* ==========================================================================
+   8b. DOMAINS TABLE (Design B)
+   ==========================================================================
+   Denser rows than Design A, with the score shown as a BAR plus a number.
+
+   Why the bar earns its place: a number alone makes you read and compare
+   digits. A bar lets you scan the whole column in one pass and spot the
+   outliers — which is the actual job of this table.
+   ========================================================================== */
+
+.score-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 118px;
+}
+
+.score-bar {
+  width: 62px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.score-bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width .5s ease;
+}
+
+.score-value {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;   /* digits align down the column */
+  min-width: 26px;
+}
+
+/* Grade as a square chip rather than a wide pill — it's one character, and a
+   square reads as a "mark" the eye can scan for. */
+.grade-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  font-weight: 700;
+  font-size: .88rem;
+}
+
+.grade-chip-A { background: var(--success-soft); color: var(--grade-a); }
+.grade-chip-B { background: var(--success-soft); color: var(--grade-b); }
+.grade-chip-C { background: var(--warning-soft); color: var(--grade-c); }
+.grade-chip-D { background: var(--warning-soft); color: var(--grade-d); }
+.grade-chip-F { background: var(--danger-soft);  color: var(--grade-f); }
+
+.row-actions { display: flex; gap: 6px; justify-content: flex-end; }
+
+/* Small outline buttons, Design B style. */
+.btn-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  font-size: .78rem;
+  font-weight: 550;
+  font-family: inherit;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .14s;
+}
+.btn-mini {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: var(--bg);
+}
+.btn-mini:hover {
+  border-color: var(--text-muted);
+  background: var(--surface-2);
+}
+.btn-mini svg { width: 13px; height: 13px; }
+
+.domain-cell {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.domain-name {
+  font-family: var(--font-mono);
+  font-size: .85rem;
+  font-weight: 600;
+}
+
+/* Inline trend word beside the domain — Design A's touch, and genuinely
+   useful: it answers "is this getting better?" without opening the report. */
+.trend-inline {
+  font-size: .74rem;
+  font-weight: 600;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+
+/* ==========================================================================
    9. STAT TILES
    ==========================================================================
    CSS GRID — the right tool when you want a grid of equal cells.
@@ -583,27 +990,50 @@ code {
    query at all. Grid handles it.
    ========================================================================== */
 
+/* ⚠ `minmax(200px, 1fr)` has a trap: when the container is NARROWER than the
+   minimum, auto-fit still makes one 200px column and the grid overflows. It
+   never falls back. `min(200px, 100%)` says "200px, or the full width if
+   that's smaller" — which is what everyone means by minmax and almost nobody
+   writes. Applied to every auto-fit grid in this file. */
 .stat-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 12px;
-  margin-top: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
 }
 
 .stat {
-  background: var(--bg);
+  background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 16px 18px;
 }
 
-.stat-value { font-size: 1.5rem; font-weight: 700; line-height: 1.1; }
+/* Label ABOVE value, not below. Reading order is then
+   "what is this? → what is it?" rather than making you decode a number first. */
 .stat-label {
-  font-size: .72rem;
+  font-size: .7rem;
+  font-weight: 700;
   text-transform: uppercase;
-  letter-spacing: .04em;
+  letter-spacing: .07em;
   color: var(--text-muted);
-  margin-top: 3px;
+  margin-bottom: 7px;
+}
+
+.stat-value {
+  font-size: 1.9rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-hint {
+  font-size: .76rem;
+  color: var(--text-muted);
+  margin-top: 7px;
+  line-height: 1.4;
 }
 
 
@@ -640,7 +1070,7 @@ code {
 .grade-D { background: var(--grade-d); }
 .grade-F { background: var(--grade-f); }
 
-.report-meta { flex: 1; min-width: 240px; }
+.report-meta { flex: 1; min-width: min(240px, 100%); }
 .report-meta h3 { margin-bottom: 4px; }
 
 .verdict { font-size: .92rem; margin-bottom: 10px; }
@@ -652,10 +1082,10 @@ code {
   font-size: .78rem;
   font-weight: 600;
 }
-.trend-improving { background: #d1fae5; color: #065f46; }
-.trend-worsening { background: #fee2e2; color: #991b1b; }
-.trend-stable    { background: #e0e7ff; color: #3730a3; }
-.trend-insufficient { background: #f1f5f9; color: var(--text-muted); }
+.trend-improving { background: var(--success-soft); color: var(--necessary); }
+.trend-worsening { background: var(--danger-soft);  color: var(--marketing); }
+.trend-stable    { background: var(--brand-light);  color: var(--brand); }
+.trend-insufficient { background: var(--neutral-soft); color: var(--text-muted); }
 
 
 /* ==========================================================================
@@ -664,7 +1094,7 @@ code {
 
 .chart-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(320px, 100%), 1fr));
   gap: 20px;
 }
 
@@ -708,7 +1138,7 @@ code {
                              tooltip. Without this the tooltip appears under
                              the cursor, steals the mouseout, and the chart
                              flickers endlessly. */
-  background: #0f172a;
+  background: var(--text);
   color: #fff;
   padding: 8px 12px;
   border-radius: 7px;
@@ -746,7 +1176,7 @@ code {
   flex-shrink: 0;
 }
 
-.flow-text { flex: 1; min-width: 220px; font-size: .88rem; }
+.flow-text { flex: 1; min-width: min(220px, 100%); font-size: .88rem; }
 
 /* ---- Region key ---- */
 .region-legend {
@@ -766,7 +1196,7 @@ code {
 /* ---- Security gauges ---- */
 .gauge-row {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(150px, 100%), 1fr));
   gap: 16px;
   margin-top: 16px;
 }
@@ -806,7 +1236,7 @@ code {
   display: grid;
   /* Globe takes the space it needs; the list fills what's left, but never
      drops below 220px before wrapping. */
-  grid-template-columns: minmax(320px, 1.4fr) minmax(220px, 1fr);
+  grid-template-columns: minmax(min(320px, 100%), 1.4fr) minmax(min(220px, 100%), 1fr);
   gap: 24px;
   align-items: start;
   margin-top: 16px;
@@ -982,17 +1412,31 @@ code {
 }
 
 
-/* ---- Checkbox that sits inline in a form row ---- */
+/* ---- Checkbox that sits inline in a form row ----
+   ⚠ This rule used to say `white-space: nowrap`, and it was the single worst
+   offender on mobile. The label is a full sentence ("Also click "Accept all"
+   and compare — reveals what consent actually unlocks"), roughly 480px of
+   unbreakable text. On a 390px phone it forced the ENTIRE page 130px wider
+   than the viewport, which is why everything looked clipped.
+
+   `nowrap` is for short atomic labels — a badge, a count, a table header.
+   Never for a sentence. */
 .checkbox-inline {
   display: flex;
-  align-items: center;
-  gap: 7px;
+  align-items: flex-start;      /* the box aligns to the FIRST line when wrapped */
+  gap: 8px;
   font-size: .84rem;
+  line-height: 1.5;
   color: var(--text-muted);
   cursor: pointer;
-  white-space: nowrap;
 }
-.checkbox-inline input { width: 15px; height: 15px; cursor: pointer; accent-color: var(--brand); }
+.checkbox-inline input {
+  width: 15px; height: 15px;
+  margin-top: .2em;             /* optically centre against the first line */
+  flex-shrink: 0;               /* the box itself must never squash */
+  cursor: pointer;
+  accent-color: var(--brand);
+}
 
 
 /* ==========================================================================
@@ -1040,14 +1484,14 @@ code {
   font-size: .9rem;
   border: 1px solid;
 }
-.verdict-compliant { background: #d1fae5; border-color: #a7f3d0; color: #065f46; }
-.verdict-minor     { background: #fef3c7; border-color: #fde68a; color: #92400e; }
-.verdict-major     { background: #fee2e2; border-color: #fecaca; color: #991b1b; }
+.verdict-compliant { background: var(--success-soft); border-color: var(--necessary); color: var(--necessary); }
+.verdict-minor     { background: var(--warning-soft); border-color: var(--analytics); color: var(--analytics); }
+.verdict-major     { background: var(--danger-soft);  border-color: var(--marketing); color: var(--marketing); }
 .verdict-unknown   { background: var(--bg); border-color: var(--border); color: var(--text-muted); }
 
-[data-theme="dark"] .verdict-compliant { background: #052e16; border-color: #14532d; color: #86efac; }
-[data-theme="dark"] .verdict-minor     { background: #422006; border-color: #713f12; color: #fcd34d; }
-[data-theme="dark"] .verdict-major     { background: #450a0a; border-color: #7f1d1d; color: #fca5a5; }
+[data-theme="dark"] .verdict-compliant { background: var(--success-soft); border-color: var(--necessary); color: var(--necessary); }
+[data-theme="dark"] .verdict-minor     { background: var(--warning-soft); border-color: var(--analytics); color: var(--analytics); }
+[data-theme="dark"] .verdict-major     { background: var(--danger-soft); border-color: var(--marketing); color: var(--marketing); }
 
 .consent-badge {
   display: inline-flex; align-items: center; gap: 6px;
@@ -1142,9 +1586,9 @@ code {
   font-size: .9rem;
 }
 
-.alert-error   { background: #fee2e2; border: 1px solid #fecaca; color: #991b1b; }
-.alert-success { background: #d1fae5; border: 1px solid #a7f3d0; color: #065f46; }
-.alert-info    { background: var(--brand-light); border: 1px solid #c7d2fe; color: var(--brand-dark); }
+.alert-error   { background: var(--danger-soft);  border: 1px solid var(--marketing); color: var(--marketing); }
+.alert-success { background: var(--success-soft); border: 1px solid var(--necessary); color: var(--necessary); }
+.alert-info    { background: var(--info-soft);    border: 1px solid var(--functional); color: var(--functional); }
 .alert-hint    { margin-top: 6px; font-size: .84rem; opacity: .85; }
 
 .scan-status { margin-top: 14px; padding: 12px 16px; border-radius: 8px; font-size: .88rem; }
@@ -1175,6 +1619,21 @@ code {
    a media query should be the exception, not the plan.
    ========================================================================== */
 
+/* ---- A note on WHY the page overflowed before -------------------------
+   Horizontal overflow on a phone is almost never caused by the breakpoints
+   being wrong. It is caused by ONE element that refuses to shrink, and
+   everything else is dragged along behind it. Here there were three:
+
+     1. `.checkbox-inline { white-space: nowrap }` — a full sentence, ~480px
+     2. `minmax(320px, 1fr)` in grids narrower than 320px
+     3. `.input { min-width: 200px }` on a select in a 170px grid track
+
+   Debugging trick worth remembering — paste into the console:
+       $$('*').filter(e => e.getBoundingClientRect().right > innerWidth)
+   That lists every element sticking out past the viewport. The culprit is
+   usually the LAST one in the list (the deepest child).
+   ----------------------------------------------------------------------- */
+
 @media (max-width: 720px) {
   .container      { padding: 16px; }
   .card           { padding: 16px; }
@@ -1189,6 +1648,57 @@ code {
   .chart          { height: 220px; }
   h1              { font-size: 1.15rem; }
 }
+
+/* ---- Phone (≤ 560px) ----
+   Below this width the generous desktop padding costs more than it gives:
+   32px of side padding on a 390px screen is 8% of the readable area spent
+   on nothing. Type sizes come down proportionally so the hierarchy survives
+   the shrink instead of every heading colliding into the next. */
+@media (max-width: 560px) {
+  .container    { padding: 14px 12px; }
+  .card         { padding: 14px; border-radius: 10px; }
+  .page-head    { margin-bottom: 16px; gap: 14px; }
+  .page-title   { font-size: 1.45rem; }
+  .page-desc    { font-size: .86rem; }
+
+  .stat         { padding: 13px 14px; }
+  .stat-value   { font-size: 1.55rem; }
+
+  .score-number { font-size: 2rem; }
+  .diff-number  { font-size: 2rem; }
+  .flow-big     { font-size: 1.8rem; }
+
+  .chart        { height: 200px; }
+  .treemap      { height: 260px; }
+  .globe        { height: 300px; }
+
+  /* The globe hint is absolutely positioned, so it doesn't stretch its parent
+     — but it CAN still paint past the viewport and create a scrollbar. Let it
+     wrap on a phone. */
+  .globe-hint   { white-space: normal; max-width: 90%; text-align: center; }
+
+  /* Card headers stack rather than squeezing a title and a button together. */
+  .card-head    { flex-direction: column; align-items: stretch; }
+  .card-head .btn { width: 100%; justify-content: center; }
+
+  /* Filter rows become one control per line — half-width selects on a phone
+     truncate their own option text, which is worse than a taller form. */
+  .filter-bar   { flex-direction: column; align-items: stretch; }
+  .filter-bar .input,
+  .filter-bar select { width: 100%; }
+
+  .pager        { flex-wrap: wrap; gap: 10px; }
+}
+
+/* ---- Last-resort overflow guards ----
+   These are safety nets, NOT the fix — the fixes above are. But a single
+   long unbroken string (a tracking URL, a 90-character cookie name) would
+   otherwise reopen the same bug, and a user should never meet a sideways
+   scrollbar because one vendor has a silly domain. */
+img, svg, canvas, video, iframe { max-width: 100%; }
+
+/* Wrap long URLs/cookie names instead of letting them push the layout. */
+.break-anywhere { overflow-wrap: anywhere; word-break: break-word; }
 
 
 /* ==========================================================================
@@ -1206,4 +1716,298 @@ code {
   body       { background: #fff; font-size: 11pt; }
   .card      { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
   .view      { display: block !important; }   /* print every tab */
+}
+
+
+/* ==========================================================================
+   15. SECURITY BARS  (Design B format — replaces the radial gauges)
+   ==========================================================================
+   Design B's version is strictly better and worth saying why: a gauge shows a
+   PERCENTAGE, a bar row shows the percentage AND the underlying counts
+   (`19/38 · 50%`) AND a one-line explanation of what the flag means.
+
+   A compliance officer needs the raw numbers to put in a report. "50%" isn't
+   quotable; "19 of 38" is.
+   ========================================================================== */
+
+.metric-row { margin-bottom: 20px; }
+.metric-row:last-child { margin-bottom: 0; }
+
+.metric-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.metric-name { font-size: .95rem; font-weight: 600; }
+
+.metric-figures {
+  font-size: .9rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.metric-count { font-weight: 700; }
+.metric-total { color: var(--text-muted); }
+.metric-pct   { color: var(--text-muted); margin-left: 6px; }
+
+.metric-track {
+  height: 7px;
+  border-radius: 999px;
+  background: var(--neutral-soft);
+  overflow: hidden;
+}
+.metric-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width .6s cubic-bezier(.4, 0, .2, 1);
+}
+
+.metric-note {
+  font-size: .8rem;
+  color: var(--text-muted);
+  margin-top: 7px;
+}
+
+
+/* ==========================================================================
+   16. CONSENT BANNER CONFIGURATOR
+   ==========================================================================
+   Two panes: controls left, live preview right. The preview updates on every
+   keystroke, so a site owner sees the actual banner rather than imagining it
+   from a form.
+   ========================================================================== */
+
+.config-layout {
+  display: grid;
+  grid-template-columns: minmax(min(280px, 100%), 340px) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.config-panel {
+  background: var(--surface);
+  border-radius: 12px;
+  padding: 20px;
+  max-height: 78vh;
+  overflow-y: auto;
+}
+
+.config-group { margin-bottom: 22px; }
+.config-group:last-child { margin-bottom: 0; }
+
+.config-label {
+  font-size: .7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  color: var(--text-muted);
+  margin-bottom: 10px;
+}
+
+.swatch-row { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+
+.swatch {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+  transition: transform .12s, border-color .12s;
+}
+.swatch:hover { transform: scale(1.12); }
+/* The selected swatch gets a ring OUTSIDE itself, so the colour stays fully
+   visible. A border drawn inside would eat into the sample. */
+.swatch-active { border-color: var(--text); box-shadow: 0 0 0 2px var(--bg) inset; }
+
+/* Segmented control — the "Bottom / Top / Centre" style selector. */
+.segmented { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.segment {
+  flex: 1 1 auto;
+  padding: 8px 14px;
+  font-size: .82rem;
+  font-family: inherit;
+  font-weight: 550;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all .14s;
+}
+.segment:hover { background: var(--surface-2); }
+.segment-active { background: var(--brand); color: var(--bg); border-color: var(--brand); }
+
+/* Toggle switch, built from a real checkbox so keyboard and screen readers
+   work with no extra ARIA. */
+.toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  margin-bottom: 9px;
+}
+.toggle-text { font-size: .88rem; font-weight: 550; }
+.toggle-hint { font-size: .76rem; color: var(--text-muted); margin-top: 2px; }
+
+.switch { position: relative; width: 42px; height: 23px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.switch-track {
+  position: absolute; inset: 0;
+  background: var(--border-strong);
+  border-radius: 23px; cursor: pointer;
+  transition: background .2s;
+}
+.switch-track::before {
+  content: ""; position: absolute;
+  width: 17px; height: 17px; left: 3px; top: 3px;
+  background: var(--bg); border-radius: 50%;
+  transition: transform .2s;
+}
+.switch input:checked + .switch-track { background: var(--brand); }
+.switch input:checked + .switch-track::before { transform: translateX(19px); }
+.switch input:focus-visible + .switch-track {
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--brand) 30%, transparent);
+}
+
+/* ---- Preview pane ---- */
+.preview-tabs {
+  display: flex;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 12px 12px 0 0;
+  overflow: hidden;
+}
+.preview-tab {
+  flex: 1;
+  padding: 13px;
+  font-family: inherit;
+  font-size: .88rem;
+  font-weight: 550;
+  border: none;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+.preview-tab-active {
+  background: var(--bg);
+  color: var(--text);
+  border-bottom-color: var(--brand);
+  font-weight: 650;
+}
+
+.preview-stage {
+  border: 1px solid var(--border);
+  border-radius: 0 0 12px 12px;
+  background: var(--bg);
+  min-height: 400px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+}
+
+/* Skeleton lines standing in for page content, so the banner is seen in
+   context rather than floating in a void. */
+.skeleton-line {
+  height: 11px;
+  border-radius: 4px;
+  background: var(--surface);
+  margin-bottom: 11px;
+}
+
+.preview-banner {
+  border: 1px solid var(--border);
+  border-top: 3px solid var(--brand);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--shadow-lg);
+  padding: 18px 20px;
+  margin-top: auto;         /* pins it to the bottom of the stage */
+}
+.preview-banner.pos-top    { margin-top: 0; margin-bottom: auto; }
+.preview-banner.pos-center { margin: auto 0; }
+
+.preview-banner h4 { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.preview-banner p  { font-size: .85rem; color: var(--text-muted); margin-bottom: 14px; }
+.preview-actions   { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+.snippet {
+  background: var(--brand);
+  color: var(--bg);
+  border-radius: 10px;
+  padding: 16px 18px;
+  font-family: var(--font-mono);
+  font-size: .78rem;
+  line-height: 1.65;
+  overflow-x: auto;
+  white-space: pre;
+}
+
+@media (max-width: 900px) {
+  .config-layout { grid-template-columns: 1fr; }
+  .config-panel { max-height: none; }
+}
+
+
+/* ==========================================================================
+   17. SETTINGS
+   ========================================================================== */
+
+.settings-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  gap: 20px;
+  align-items: start;
+}
+
+.spec-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: .88rem;
+}
+.spec-row:last-child { border-bottom: none; }
+.spec-key { color: var(--text-muted); }
+.spec-val { font-family: var(--font-mono); font-size: .82rem; text-align: right; }
+
+/* HTTP method badges. Colour here IS semantic — it encodes what the call
+   does, which is exactly the kind of meaning worth spending hue on. */
+.method-badge {
+  display: inline-block;
+  min-width: 52px;
+  text-align: center;
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: .7rem;
+  font-weight: 700;
+  font-family: var(--font-mono);
+}
+.method-GET    { background: var(--info-soft);    color: var(--functional); }
+.method-POST   { background: var(--success-soft); color: var(--necessary); }
+.method-DELETE { background: var(--danger-soft);  color: var(--marketing); }
+
+.status-card {
+  border-radius: 10px;
+  padding: 16px 18px;
+  margin-bottom: 18px;
+  border: 1px solid;
+}
+.status-card-ok   { background: var(--success-soft); border-color: var(--necessary); }
+.status-card-fail { background: var(--warning-soft); border-color: var(--analytics); }
+.status-card h4 { margin-bottom: 5px; }
+.status-card p  { font-size: .85rem; }
+
+@media (max-width: 900px) {
+  .settings-layout { grid-template-columns: 1fr; }
 }

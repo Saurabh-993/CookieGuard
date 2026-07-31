@@ -259,13 +259,40 @@ async def accept_consent(page, timeout_ms: int = 6000) -> dict:
     consent added 40 cookies, you can check that we clicked the right thing.
     """
     result = {"clicked": False, "method": None, "detail": None,
-              "selector": None, "text": None, "error": None}
+              "selector": None, "text": None, "error": None,
+              "candidates_seen": [], "frame_count": 0, "frame_urls": []}
+
+    # ---- LAYER -1: are we even looking at the real site? --------------------
+    # Cloudflare, Akamai and similar serve a bot-challenge page instead of the
+    # site. It has no banner because it has no content — reporting "no banner
+    # found" would be true but deeply misleading.
+    #
+    # StackOverflow does exactly this: HTTP 403, title "Just a moment...", and
+    # the only domain contacted is challenges.cloudflare.com. That is a
+    # completely different finding from "this site has no consent banner", and
+    # conflating the two would make the whole scan worthless without anyone
+    # noticing.
+    try:
+        title = (await page.title() or "").lower()
+        CHALLENGE_TITLES = ["just a moment", "attention required",
+                            "checking your browser", "access denied",
+                            "verifying you are human", "one moment, please"]
+        if any(t in title for t in CHALLENGE_TITLES):
+            result.update(method="bot_challenge",
+                          detail=f"Blocked by a bot challenge (page title: '{title[:60]}')")
+            return result
+    except Exception:
+        pass
 
     # ---- LAYER 0: wait for the banner to actually appear --------------------
     # Without this we search before the banner has rendered and report
     # "not_found" on sites that plainly do have one. This was the bug that
     # made the first version fail on both BBC and CNN.
-    await _wait_for_banner(page, timeout_ms)
+    found_container = await _wait_for_banner(page, timeout_ms)
+    if found_container:
+        # A container appeared, but it may still be animating in. Half a second
+        # is enough for a CSS transition and costs nothing when there isn't one.
+        await page.wait_for_timeout(600)
 
     # ---- LAYER 1: known CMP selectors on the main page ---------------------
     if await _try_selectors(page, CMP_SELECTORS, result, "cmp_selector"):
@@ -365,6 +392,56 @@ async def accept_consent(page, timeout_ms: int = 6000) -> dict:
                     continue
     except Exception as e:
         result["error"] = f"{type(e).__name__}: {e}"
+
+    # ---- LAYER 5: DIAGNOSTICS -----------------------------------------------
+    # We failed. Before giving up, record WHAT WE ACTUALLY SAW.
+    #
+    # ⚠ WHY THIS MATTERS MORE THAN ANOTHER GUESS AT A SELECTOR
+    #
+    # A detector that reports "not found" gives you no information about WHY.
+    # Is the banner absent? Present but in a shadow root? Present with text we
+    # don't recognise? Geo-gated away? Each has a different fix, and you cannot
+    # tell them apart from the outside.
+    #
+    # So when we fail, we capture every visible clickable element's text, plus
+    # the frame list. One run then answers the question that would otherwise
+    # take several rounds of guessing.
+    #
+    # **Make your failure modes self-diagnosing.** It is almost always cheaper
+    # than adding another speculative pattern.
+    try:
+        seen = []
+        for scope, label in [(page, "main")] + [
+            (f, f"frame:{(f.url or '')[:60]}") for f in page.frames
+            if f != page.main_frame
+        ]:
+            try:
+                els = scope.locator("button, a[role='button'], [role='button'], "
+                                    "input[type='button'], input[type='submit'], "
+                                    "a.btn, div[onclick]")
+                n = min(await els.count(), 40)
+                for i in range(n):
+                    try:
+                        el = els.nth(i)
+                        if not await el.is_visible(timeout=120):
+                            continue
+                        txt = " ".join((
+                            await el.inner_text(timeout=120)
+                            or await el.get_attribute("aria-label") or "").split())
+                        if txt and len(txt) < 70:
+                            seen.append(f"[{label}] {txt}")
+                    except Exception:
+                        continue
+            except Exception:
+                continue
+
+        result["candidates_seen"] = seen[:40]
+        result["frame_count"] = len(page.frames)
+        result["frame_urls"] = [
+            (f.url or "")[:90] for f in page.frames if f != page.main_frame
+        ][:10]
+    except Exception:
+        pass
 
     # ---- Nothing found ------------------------------------------------------
     # Say so plainly. "No banner found" and "no tracking added" are completely

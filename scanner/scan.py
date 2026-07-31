@@ -621,10 +621,46 @@ def print_report(result: dict) -> None:
                 if before:
                     print(f"  Accepting multiplied tracking by "
                           f"{round(after / before, 1)}x")
+        elif click.get("method") == "bot_challenge":
+            # A completely different finding. The scan didn't see the site at
+            # all, so EVERY number above is about the challenge page, not the
+            # real one.
+            print(f"  ⚠  BLOCKED BY A BOT CHALLENGE")
+            print(f"  {sub}")
+            print(f"  {click.get('detail')}")
+            print(f"  The scanner never reached the real site, so every figure")
+            print(f"  in this report describes the challenge page instead.")
+            print(f"  Anti-bot protection is a genuine limitation of automated")
+            print(f"  scanning — not a finding about the site's cookies.")
         else:
             print(f"  No accept button found ({click.get('method')}).")
             print(f"  NOTE: 'no banner found' is NOT the same as "
                   f"'no tracking added'.")
+
+            # DIAGNOSTICS. A bare "not found" tells you nothing about WHY.
+            # Printing what we actually saw turns one run into an answer
+            # instead of the start of a guessing game.
+            seen = click.get("candidates_seen") or []
+            frames = click.get("frame_urls") or []
+            print(f"\n  DIAGNOSTICS — {click.get('frame_count', 0)} frame(s) on the page")
+            if frames:
+                print(f"  {sub}")
+                print("  Non-main frames (a banner may be inside one):")
+                for u in frames:
+                    print(f"    {u}")
+            print(f"  {sub}")
+            if seen:
+                print(f"  Visible clickable elements ({len(seen)} shown):")
+                for t in seen:
+                    print(f"    {t}")
+                print("\n  If an 'Accept'-type button is listed above, its text")
+                print("  needs adding to ACCEPT_PATTERNS in consent_clicker.py.")
+                print("  If NOTHING here looks like a banner, the site probably")
+                print("  did not show one to this IP — see the geo note below.")
+            else:
+                print("  No visible clickable elements found at all.")
+                print("  That strongly suggests the banner is inside a CLOSED")
+                print("  shadow root, or was never shown to this visitor.")
 
     print(f"{line}\n")
 

@@ -51,6 +51,16 @@
 
   <title>CookieGuard — Cookie Compliance Dashboard</title>
 
+  <!--
+    Inter for UI, JetBrains Mono for anything technical (cookie names,
+    domains). `preconnect` opens the connection to the font host early, before
+    the CSS that requests the fonts has even been parsed — it shaves a
+    round-trip off first paint.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
   <link rel="stylesheet" href="style.css">
 
   <!--
@@ -90,56 +100,105 @@
 -->
 <header class="site-header">
   <div class="header-inner">
-    <div class="brand">
-      <span class="brand-icon">🍪</span>
-      <div>
-        <h1>CookieGuard</h1>
-        <p class="tagline">Cookie compliance scanner &amp; consent manager</p>
-      </div>
-    </div>
 
+    <!-- Brand -->
+    <button class="brand" data-view="domains" aria-label="CookieGuard home">
+      <span class="brand-mark">
+        <!-- Inline SVG rather than an icon font: no extra request, it inherits
+             currentColor, and it stays sharp at any size. -->
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </span>
+      <span class="brand-name">Cookie<span class="brand-accent">Guard</span></span>
+    </button>
+
+    <!-- Centre navigation (Design B placement, Design A colours) -->
+    <nav class="main-nav" id="main-nav" role="tablist">
+      <button class="nav-item nav-item-active" data-view="domains" role="tab" aria-selected="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><path d="M2 12h20"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+        Domains
+      </button>
+      <button class="nav-item" data-view="inventory" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/>
+          <line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+        Cookie Inventory
+      </button>
+      <button class="nav-item" data-view="report" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/>
+          <line x1="6" y1="20" x2="6" y2="14"/>
+        </svg>
+        Audit Report
+      </button>
+      <button class="nav-item" data-view="history" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+        </svg>
+        Scan History
+      </button>
+      <button class="nav-item" data-view="consent" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        Consent Banner
+      </button>
+      <button class="nav-item" data-view="settings" role="tab" aria-selected="false">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9V12a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+        Settings
+      </button>
+    </nav>
+
+    <!-- Status + theme -->
     <div class="header-actions">
-      <!-- Live connection status, updated by app.js from GET /health -->
-      <div class="api-status" id="api-status">
-        <span class="dot dot-pending"></span>
-        <span id="api-status-text">Connecting…</span>
-      </div>
+      <span class="status-pill status-demo" id="api-status">
+        <span class="dot"></span>
+        <span id="api-status-text">Connecting</span>
+      </span>
 
-      <!--
-        Theme toggle.
-        `aria-label` is what a screen reader announces — the emoji alone means
-        nothing to it. `title` gives sighted users a hover tooltip.
-      -->
       <button class="theme-toggle" id="theme-toggle"
               aria-label="Switch between light and dark theme"
-              title="Toggle dark mode">🌙</button>
+              title="Toggle dark mode">
+        <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+        </svg>
+      </button>
+
+      <button class="nav-toggle" id="nav-toggle" aria-label="Open navigation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" aria-hidden="true">
+          <line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/>
+          <line x1="3" y1="18" x2="21" y2="18"/>
+        </svg>
+      </button>
     </div>
   </div>
 </header>
 
-<!--
-  TABS.
-  `data-view` is a DATA ATTRIBUTE — a custom attribute the browser ignores but
-  JavaScript can read via element.dataset.view. It's the standard way to attach
-  your own metadata to an element without inventing invalid HTML.
-
-  aria-selected tells assistive technology which tab is active. Sighted users
-  see the highlight; screen-reader users need it stated explicitly.
--->
-<nav class="tabs" role="tablist">
-  <button class="tab tab-active" data-view="domains"   role="tab" aria-selected="true">
-    Domains
-  </button>
-  <button class="tab" data-view="inventory" role="tab" aria-selected="false">
-    Cookie Inventory
-  </button>
-  <button class="tab" data-view="report"    role="tab" aria-selected="false">
-    Audit Report
-  </button>
-  <button class="tab" data-view="history"   role="tab" aria-selected="false">
-    Scan History
-  </button>
-</nav>
+<!-- Shown only when the API is unreachable. Design B's demo-mode idea:
+     never present sample data as if it were a live result. -->
+<div class="demo-banner" id="demo-banner" hidden>
+  <strong>API unreachable.</strong>
+  Start it with <code>uvicorn api.main:app --reload</code> — nothing below is live.
+</div>
 
 <main class="container">
 
@@ -157,54 +216,87 @@
   <!-- ================================================================== -->
   <section class="view view-active" id="view-domains">
 
-    <!-- ---- Scan form ---- -->
-    <div class="card">
-      <h2>Scan a website</h2>
-      <p class="muted">
-        Opens a real browser, loads the page, and records every cookie set
-        <strong>before any consent is given</strong>. Takes 5–30 seconds.
-      </p>
+    <!-- Page header: Design A's eyebrow → title → description -->
+    <div class="page-head">
+      <div>
+        <div class="page-eyebrow">Dashboard</div>
+        <h1 class="page-title">Domains</h1>
+        <p class="page-desc">
+          Run a real-browser cookie scan, then compare compliance across every
+          domain in your portfolio.
+        </p>
+      </div>
+      <button class="btn btn-ghost" id="refresh-domains">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round"
+             style="width:15px;height:15px" aria-hidden="true">
+          <polyline points="23 4 23 10 17 10"/>
+          <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+        Refresh
+      </button>
+    </div>
 
-      <!--
-        A real <form>. Using a form (rather than a bare div with a button)
-        gives us Enter-to-submit and browser validation for free.
-        `novalidate` turns off the browser's own error bubbles so we can show
-        our own consistent messages instead.
-      -->
-      <form class="scan-form" id="scan-form" novalidate>
-        <input
-          type="url"
-          id="scan-url"
-          class="input"
-          placeholder="https://example.com"
-          required
-          autocomplete="url"
-        >
-        <select id="scan-wait" class="input input-narrow" title="Settle time">
-          <option value="3">3s wait</option>
-          <option value="5" selected>5s wait</option>
-          <option value="10">10s wait</option>
-          <option value="15">15s wait</option>
-        </select>
-        <label class="checkbox-inline" title="Roughly doubles the scan time">
-          <input type="checkbox" id="scan-accept-consent">
-          <span>Also click "Accept all" and compare</span>
-        </label>
-        <button type="submit" class="btn btn-primary" id="scan-btn">
-          <span id="scan-btn-text">Scan</span>
-          <!-- The spinner is always in the DOM; CSS hides it until scanning. -->
-          <span class="spinner" id="scan-spinner" hidden></span>
-        </button>
+    <!-- ---- Scan form: Design B's clean architecture ---- -->
+    <div class="card">
+      <form class="scan-form-grid" id="scan-form" novalidate>
+        <div class="field">
+          <label class="field-label" for="scan-url">Website URL</label>
+          <input type="url" id="scan-url" class="input input-mono"
+                 placeholder="https://example.com" required autocomplete="url">
+          <p class="field-hint">
+            A headless Chromium session loads the page and records every cookie
+            and tracking request.
+          </p>
+        </div>
+
+        <div class="field field-narrow">
+          <label class="field-label" for="scan-wait">Wait time</label>
+          <select id="scan-wait" class="input">
+            <option value="3">3 seconds</option>
+            <option value="5" selected>5 seconds</option>
+            <option value="10">10 seconds</option>
+            <option value="15">15 seconds</option>
+          </select>
+        </div>
+
+        <div class="field field-action">
+          <button type="submit" class="btn btn-primary btn-lg" id="scan-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round"
+                 style="width:16px;height:16px" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+            </svg>
+            <span id="scan-btn-text">Scan website</span>
+            <span class="spinner" id="scan-spinner" hidden></span>
+          </button>
+        </div>
       </form>
+
+      <label class="checkbox-inline" style="margin-top:14px">
+        <input type="checkbox" id="scan-accept-consent">
+        <span>
+          Also click &ldquo;Accept all&rdquo; and compare
+          <span class="muted">— reveals what consent actually unlocks</span>
+        </span>
+      </label>
 
       <div class="scan-status" id="scan-status" hidden></div>
     </div>
 
-    <!-- ---- Domain list ---- -->
+    <!-- ---- Stat tiles: Design A's metrics, Design B's clean surface ---- -->
+    <div class="stat-grid" id="domain-stats"></div>
+
+    <!-- ---- Domains table: Design B ---- -->
     <div class="card">
       <div class="card-head">
-        <h2>Scanned domains</h2>
-        <button class="btn btn-ghost" id="refresh-domains">Refresh</button>
+        <div>
+          <h2>Scan history by domain</h2>
+          <p class="muted small" style="margin-top:2px">
+            Latest compliance score per domain, with full scan history behind
+            each report.
+          </p>
+        </div>
       </div>
 
       <div class="table-wrap">
@@ -214,18 +306,18 @@
               <th>Domain</th>
               <th class="num">Scans</th>
               <th class="num">Cookies</th>
-              <th>Latest score</th>
+              <th>Score</th>
+              <th>Grade</th>
               <th>Last scanned</th>
               <th></th>
             </tr>
           </thead>
-          <!-- Filled by app.js. Empty on purpose. -->
           <tbody id="domains-tbody"></tbody>
         </table>
       </div>
 
       <p class="empty-state" id="domains-empty" hidden>
-        No domains scanned yet. Use the form above to run your first scan.
+        No domains scanned yet. Enter a URL above to run your first scan.
       </p>
     </div>
   </section>
@@ -451,7 +543,7 @@
           A security finding rather than a consent one — but it belongs in the
           same audit.
         </p>
-        <div class="gauge-row" id="security-gauges"></div>
+        <div id="security-metrics"></div>
       </div>
     </div>
 
@@ -555,6 +647,188 @@
         <button class="btn btn-ghost" id="history-prev">← Previous</button>
         <span class="muted small" id="history-page-label"></span>
         <button class="btn btn-ghost" id="history-next">Next →</button>
+      </div>
+    </div>
+  </section>
+
+
+  <!-- ================================================================== -->
+  <!-- VIEW 5: CONSENT BANNER CONFIGURATOR                                 -->
+  <!-- ==================================================================
+       The best product idea from either mockup: it turns the banner from
+       "a file in a repo" into something a site owner could actually adopt.
+       Configure it, see it live, copy the snippet.
+  -->
+  <section class="view" id="view-consent">
+    <div class="page-head">
+      <div>
+        <div class="page-eyebrow">Consent</div>
+        <h1 class="page-title">Consent Banner</h1>
+        <p class="page-desc">
+          Configure on the left, see your banner update live on the right.
+          A drop-in script that blocks analytics, marketing and functional
+          cookies until a visitor opts in.
+        </p>
+      </div>
+    </div>
+
+    <div class="config-layout">
+      <div class="config-panel">
+        <div class="config-group">
+          <div class="config-label">Brand colour</div>
+          <div class="swatch-row" id="cfg-swatches"></div>
+          <input type="text" class="input input-mono" id="cfg-color" value="#4f46e5">
+        </div>
+
+        <div class="config-group">
+          <div class="config-label">Banner position</div>
+          <div class="segmented" id="cfg-position">
+            <button class="segment segment-active" data-pos="bottom">Bottom</button>
+            <button class="segment" data-pos="top">Top</button>
+            <button class="segment" data-pos="center">Centre</button>
+          </div>
+        </div>
+
+        <div class="config-group">
+          <div class="config-label">Display options</div>
+          <label class="toggle-row">
+            <span>
+              <div class="toggle-text">Page overlay</div>
+              <div class="toggle-hint">Dim the page until the visitor responds.</div>
+            </span>
+            <span class="switch">
+              <input type="checkbox" id="cfg-overlay" checked>
+              <span class="switch-track"></span>
+            </span>
+          </label>
+          <label class="toggle-row">
+            <span>
+              <div class="toggle-text">Show categories first</div>
+              <div class="toggle-hint">Open on the granular view, not the summary.</div>
+            </span>
+            <span class="switch">
+              <input type="checkbox" id="cfg-details">
+              <span class="switch-track"></span>
+            </span>
+          </label>
+        </div>
+
+        <div class="config-group">
+          <div class="config-label">Banner title</div>
+          <input type="text" class="input" id="cfg-title" value="We use cookies">
+        </div>
+
+        <div class="config-group">
+          <div class="config-label">Description</div>
+          <textarea class="input" id="cfg-body" rows="4">Necessary cookies keep this site working. Everything else stays blocked until you say yes.</textarea>
+        </div>
+
+        <div class="config-group">
+          <div class="config-label">Privacy policy URL</div>
+          <input type="url" class="input input-mono" id="cfg-policy" value="https://example.com/privacy">
+        </div>
+
+        <div class="config-group">
+          <div class="config-label">Consent lifetime</div>
+          <div class="segmented" id="cfg-expiry">
+            <button class="segment" data-days="90">90 days</button>
+            <button class="segment segment-active" data-days="180">180 days</button>
+            <button class="segment" data-days="365">365 days</button>
+          </div>
+          <p class="field-hint">
+            CNIL suggests re-asking within about six months. Consent should
+            never be assumed forever.
+          </p>
+        </div>
+      </div>
+
+      <div>
+        <div class="preview-tabs" id="preview-tabs">
+          <button class="preview-tab preview-tab-active" data-state="first">First visit</button>
+          <button class="preview-tab" data-state="details">Customise</button>
+          <button class="preview-tab" data-state="withdrawn">Withdrawn</button>
+        </div>
+        <div class="preview-stage" id="preview-stage"></div>
+
+        <div class="card" style="margin-top:20px">
+          <div class="card-head">
+            <div>
+              <h3>Integration snippet</h3>
+              <p class="muted small" style="margin-top:2px">
+                Paste once, as high in your <code>&lt;head&gt;</code> as
+                possible — before any tag manager.
+              </p>
+            </div>
+            <button class="btn btn-ghost" id="copy-snippet">Copy snippet</button>
+          </div>
+          <div class="snippet" id="cfg-snippet"></div>
+
+          <p class="muted small" style="margin-top:14px">
+            Then mark each tracker with its category.
+            <code>type="text/plain"</code> is what stops the browser executing
+            it — the tag isn't even downloaded.
+          </p>
+          <div class="snippet" style="margin-top:10px">&lt;script type="text/plain" data-cookieguard="analytics"
+        src="https://www.googletagmanager.com/gtag/js?id=G-XXXX"&gt;&lt;/script&gt;</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ================================================================== -->
+  <!-- VIEW 6: SETTINGS                                                    -->
+  <!-- ================================================================== -->
+  <section class="view" id="view-settings">
+    <div class="page-head">
+      <div>
+        <div class="page-eyebrow">Settings</div>
+        <h1 class="page-title">API connection</h1>
+        <p class="page-desc">
+          CookieGuard reads from your self-hosted FastAPI + Playwright + SQLite
+          backend. Everything on this page is generated from the live service.
+        </p>
+      </div>
+      <button class="btn btn-ghost" id="recheck-api">Re-check</button>
+    </div>
+
+    <div class="settings-layout">
+      <div class="card">
+        <h3>Endpoints</h3>
+        <p class="muted small" style="margin-top:2px">
+          Every route the dashboard calls.
+        </p>
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
+            </thead>
+            <tbody id="endpoints-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Current status</h3>
+        <div id="settings-status" style="margin-top:14px"></div>
+
+        <div class="spec-row"><span class="spec-key">Scanner</span>
+          <span class="spec-val">Playwright · headless Chromium</span></div>
+        <div class="spec-row"><span class="spec-key">API</span>
+          <span class="spec-val">Python · FastAPI</span></div>
+        <div class="spec-row"><span class="spec-key">Storage</span>
+          <span class="spec-val">SQLite</span></div>
+        <div class="spec-row"><span class="spec-key">Classification</span>
+          <span class="spec-val">276 rule-based signatures</span></div>
+        <div class="spec-row"><span class="spec-key">Domain parsing</span>
+          <span class="spec-val">Mozilla Public Suffix List</span></div>
+        <div class="spec-row"><span class="spec-key">Base URL</span>
+          <span class="spec-val" id="settings-base-url">—</span></div>
+
+        <div class="alert alert-info small" style="margin-top:18px">
+          Automated classification is a technical aid, <strong>not legal
+          advice</strong>. Always have a human reviewer confirm categories and
+          retention before publishing a compliance statement.
+        </div>
       </div>
     </div>
   </section>
