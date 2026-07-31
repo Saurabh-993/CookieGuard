@@ -175,7 +175,7 @@ CookieGuard/
 ├── scanner/
 │   ├── scan.py              # Playwright — opens a browser, captures cookies + network requests
 │   ├── classifier.py        # Categorises each cookie + computes a compliance score
-│   └── trackers.json        # Signature database: 110 known trackers (_ga → Analytics, etc.)
+│   └── trackers.json        # Signature database: 272 known trackers (_ga → Analytics, etc.)
 │
 ├── tests/
 │   └── test_classifier.py   # 30 pytest tests for the classification logic

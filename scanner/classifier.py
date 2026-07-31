@@ -101,6 +101,39 @@ def _registrable_domain(hostname: str) -> str:
     return ".".join(parts[-2:])
 
 
+def sorted_domain_signatures(trackers: dict) -> list:
+    """
+    Return domain signatures sorted MOST SPECIFIC FIRST (longest domain first).
+
+    WHY THIS EXISTS — a real bug found on live data
+    -----------------------------------------------
+    Scanning bbc.com produced this:
+
+        static.files.bbci.co.uk            → necessary (BBC assets)   ✅
+        mybbc-analytics.files.bbci.co.uk   → necessary (BBC assets)   ❌ WRONG
+
+    The second one is an ANALYTICS endpoint — the word is right there in the
+    hostname — but it was labelled `necessary`, the one consent-exempt
+    category. It happened because `bbci.co.uk` appeared in the signature list
+    and matched first, so the more specific analytics entry was never reached.
+
+    Sorting longest-first makes the most specific signature win:
+
+        mybbc-analytics.files.bbci.co.uk   (31 chars)  ← checked first
+        bbci.co.uk                         (10 chars)  ← fallback
+
+    This is the SAME bug class as the prefix-ordering issue in
+    `classify_cookie` — whichever entry happens to sit earlier in a data file
+    wins. Any "first match in a list" lookup where entries can overlap needs an
+    explicit specificity rule, or behaviour depends on file ordering.
+    """
+    return sorted(
+        trackers.get("domain_signatures", []),
+        key=lambda s: len(s["domain"]),
+        reverse=True,
+    )
+
+
 def _domain_matches(cookie_domain: str, signature_domain: str) -> bool:
     """
     Does this cookie's domain belong to this tracker?
@@ -199,7 +232,8 @@ def classify_cookie(cookie: dict, trackers: dict) -> dict:
 
     # --- LEVEL 3: domain match ----------------------------------------------
     # We don't recognise the name, but we recognise WHO set it.
-    for sig in trackers.get("domain_signatures", []):
+    # Sorted most-specific-first — see sorted_domain_signatures() for why.
+    for sig in sorted_domain_signatures(trackers):
         if _domain_matches(domain, sig["domain"]):
             return {
                 "category": sig["category"],
@@ -451,10 +485,12 @@ def classify_scan(scan_result: dict, trackers: dict = None) -> dict:
     # these can be trackers even when they set no cookie at all — that is the
     # tracking-pixel case, and it is exactly why we captured requests in
     # Phase 1.
+    # Sort once, outside the loop — no point re-sorting for every domain.
+    domain_sigs = sorted_domain_signatures(trackers)
     enriched_domains = []
     for entry in scan_result.get("third_party_domains", []):
         match = None
-        for sig in trackers.get("domain_signatures", []):
+        for sig in domain_sigs:
             if _domain_matches(entry["domain"], sig["domain"]):
                 match = sig
                 break

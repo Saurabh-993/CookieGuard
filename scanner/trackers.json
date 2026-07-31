@@ -24,12 +24,9 @@
     "Sources: vendor documentation, ICO/CNIL guidance, and the public Open Cookie",
     "Database. Classifications are a technical aid, NOT legal advice."
   ],
-
-  "version": "1.0",
+  "version": "1.2",
   "updated": "2026-07-31",
-
   "cookie_signatures": [
-
     {
       "pattern": "_ga",
       "match": "exact",
@@ -135,7 +132,6 @@
       "vendor": "Optimizely",
       "purpose": "A/B testing. Keeps a visitor in the same test variant across visits."
     },
-
     {
       "pattern": "_fbp",
       "match": "exact",
@@ -276,7 +272,6 @@
       "vendor": "AppNexus / Xandr",
       "purpose": "Real-time-bidding identifier shared across the programmatic ad ecosystem."
     },
-
     {
       "pattern": "intercom-",
       "match": "prefix",
@@ -305,7 +300,6 @@
       "vendor": "Next.js",
       "purpose": "Remembers the user's chosen language for internationalised routing."
     },
-
     {
       "pattern": "PHPSESSID",
       "match": "exact",
@@ -389,66 +383,1398 @@
       "category": "necessary",
       "vendor": "Cookiebot",
       "purpose": "Stores the user's consent state for the current domain."
+    },
+    {
+      "pattern": "_cb",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Chartbeat",
+      "purpose": "Primary Chartbeat visitor identifier. Real-time readership analytics used by most large news publishers."
+    },
+    {
+      "pattern": "_chartbeat",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Chartbeat",
+      "purpose": "Chartbeat session and engagement tracking (_chartbeat2, _chartbeat4)."
+    },
+    {
+      "pattern": "_v__chartbeat",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Chartbeat",
+      "purpose": "Chartbeat engagement-time measurement."
+    },
+    {
+      "pattern": "_cb_svref",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Chartbeat",
+      "purpose": "Records the referring page so Chartbeat can attribute traffic sources."
+    },
+    {
+      "pattern": "pa_vid",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Piano Analytics",
+      "purpose": "Piano Analytics visitor identifier."
+    },
+    {
+      "pattern": "lux_uid",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "SpeedCurve LUX",
+      "purpose": "Real User Monitoring - measures actual page performance for real visitors."
+    },
+    {
+      "pattern": "DotMetrics.",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "DotMetrics",
+      "purpose": "Audience measurement panel, widely used by European publishers. DeviceKey and UniqueUserIdentityCookie identify the browser."
+    },
+    {
+      "pattern": "DM_SitId",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "DotMetrics",
+      "purpose": "Per-site and per-section audience measurement identifier."
+    },
+    {
+      "pattern": "_scor_uid",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Comscore",
+      "purpose": "Cross-publisher audience measurement identifier."
+    },
+    {
+      "pattern": "__qca",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Quantcast",
+      "purpose": "Audience measurement and demographic segmentation."
+    },
+    {
+      "pattern": "IMRID",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Nielsen",
+      "purpose": "Nielsen Digital Content Ratings audience measurement identifier."
+    },
+    {
+      "pattern": "AMCV_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Adobe Experience Cloud",
+      "purpose": "Adobe Marketing Cloud visitor ID, shared across all Adobe products on the site."
+    },
+    {
+      "pattern": "AMCVS_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Adobe Experience Cloud",
+      "purpose": "Adobe Marketing Cloud session flag."
+    },
+    {
+      "pattern": "optimizelySession",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Optimizely",
+      "purpose": "A/B testing session identifier."
+    },
+    {
+      "pattern": "_sp_id.",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Snowplow",
+      "purpose": "Snowplow open-source analytics visitor identifier. NOTE: despite the _sp_ prefix this is NOT Sourcepoint - a good example of why signature precision matters."
+    },
+    {
+      "pattern": "_sp_ses.",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Snowplow",
+      "purpose": "Snowplow session identifier."
+    },
+    {
+      "pattern": "WMF-Uniq",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "Wikimedia Foundation",
+      "purpose": "Unique-device counting for Wikipedia traffic statistics."
+    },
+    {
+      "pattern": "WMF-Last-Access",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "Wikimedia Foundation",
+      "purpose": "Records last access date to count unique devices without persistent tracking. A deliberately privacy-preserving design."
+    },
+    {
+      "pattern": "FastAB_",
+      "match": "prefix",
+      "category": "analytics",
+      "vendor": "CNN / WBD",
+      "purpose": "In-house A/B testing framework assignment."
+    },
+    {
+      "pattern": "ckns_mvt",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "BBC",
+      "purpose": "BBC multivariate testing - assigns the visitor to an experiment group."
+    },
+    {
+      "pattern": "ckns_echo_device_id",
+      "match": "exact",
+      "category": "analytics",
+      "vendor": "BBC",
+      "purpose": "BBC Echo analytics device identifier."
+    },
+    {
+      "pattern": "_sp_su",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Sourcepoint",
+      "purpose": "Sourcepoint consent management platform - stores whether the user is in a regulated region."
+    },
+    {
+      "pattern": "usnatUUID",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Sourcepoint",
+      "purpose": "Identifier for the US national privacy (opt-out) consent record."
+    },
+    {
+      "pattern": "usprivacy",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "IAB CCPA Framework",
+      "purpose": "Stores the IAB US Privacy String recording the user's opt-out choice."
+    },
+    {
+      "pattern": "euconsent-v2",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "IAB TCF",
+      "purpose": "IAB Transparency and Consent Framework string - the user's recorded consent choices."
+    },
+    {
+      "pattern": "addtl_consent",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "IAB TCF",
+      "purpose": "Google Additional Consent string, recording vendors outside the IAB list."
+    },
+    {
+      "pattern": "SecGpc",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Global Privacy Control",
+      "purpose": "Records that the browser sent a Global Privacy Control opt-out signal."
+    },
+    {
+      "pattern": "OptanonControl",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "OneTrust",
+      "purpose": "OneTrust consent banner control state."
+    },
+    {
+      "pattern": "_OT_sm",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "OneTrust",
+      "purpose": "OneTrust session marker."
+    },
+    {
+      "pattern": "ckns_policy",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "BBC",
+      "purpose": "BBC's record of the visitor's cookie consent choices. Storing a refusal is itself necessary."
+    },
+    {
+      "pattern": "NetworkProbeLimit",
+      "match": "exact",
+      "category": "necessary",
+      "vendor": "Wikimedia Foundation",
+      "purpose": "Rate-limits network diagnostic probes. Purely technical."
+    },
+    {
+      "pattern": "permutive-id",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Permutive",
+      "purpose": "Data management platform identifier. Builds audience segments from reading behaviour for ad targeting."
+    },
+    {
+      "pattern": "_pcid",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano / Cxense",
+      "purpose": "Piano (formerly Cxense) persistent browser identifier for audience segmentation."
+    },
+    {
+      "pattern": "_pctx",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano / Cxense",
+      "purpose": "Piano visitor context - compressed profile of recent behaviour."
+    },
+    {
+      "pattern": "_pcus",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano / Cxense",
+      "purpose": "Piano user segment assignments."
+    },
+    {
+      "pattern": "_pprv",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano / Cxense",
+      "purpose": "Piano privacy and consent state for the Cxense ad stack."
+    },
+    {
+      "pattern": "cX_P",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Cxense",
+      "purpose": "Cxense persistent user identifier."
+    },
+    {
+      "pattern": "cX_G",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Cxense",
+      "purpose": "Cxense global user identifier, shared across the Cxense publisher network."
+    },
+    {
+      "pattern": "gckp",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Cxense",
+      "purpose": "Cxense cross-domain identity sync cookie."
+    },
+    {
+      "pattern": "__tbc",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano (Tinypass)",
+      "purpose": "Piano paywall and audience segmentation."
+    },
+    {
+      "pattern": "__pat",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano (Tinypass)",
+      "purpose": "Piano visitor timezone/attribute store."
+    },
+    {
+      "pattern": "__pvi",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano (Tinypass)",
+      "purpose": "Piano visitor identifier."
+    },
+    {
+      "pattern": "xbc",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano (Tinypass)",
+      "purpose": "Piano browser identifier."
+    },
+    {
+      "pattern": "_bti",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano (Tinypass)",
+      "purpose": "Piano browser tracking identifier."
+    },
+    {
+      "pattern": "_bts",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Piano (Tinypass)",
+      "purpose": "Piano browser tracking session."
+    },
+    {
+      "pattern": "_cc_id",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Lotame",
+      "purpose": "Lotame data management platform browser identifier."
+    },
+    {
+      "pattern": "_cc_dc",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Lotame",
+      "purpose": "Lotame data collection sync state."
+    },
+    {
+      "pattern": "lotame_domain_check",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Lotame",
+      "purpose": "Verifies that Lotame can set cookies on this domain."
+    },
+    {
+      "pattern": "panoramaId",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Lotame Panorama",
+      "purpose": "Cookieless-era identity graph ID used for cross-site ad targeting."
+    },
+    {
+      "pattern": "id5",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "ID5",
+      "purpose": "Shared advertising identity graph ID, designed to survive third-party cookie deprecation."
+    },
+    {
+      "pattern": "3pi",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "ID5",
+      "purpose": "ID5 third-party identity sync."
+    },
+    {
+      "pattern": "pbjs_sharedId",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Prebid SharedID",
+      "purpose": "Prebid.js shared identifier passed to every ad bidder in the auction."
+    },
+    {
+      "pattern": "cto_bundle",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Criteo",
+      "purpose": "Criteo retargeting profile - drives 'ads for things you already looked at'."
+    },
+    {
+      "pattern": "rlas3",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "LiveRamp",
+      "purpose": "LiveRamp identity resolution cookie."
+    },
+    {
+      "pattern": "_lr_env",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "LiveRamp ATS",
+      "purpose": "LiveRamp Authenticated Traffic Solution envelope - a hashed-email-based identifier."
+    },
+    {
+      "pattern": "_lr_retry_request",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "LiveRamp ATS",
+      "purpose": "LiveRamp retry state."
+    },
+    {
+      "pattern": "tuuid",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "BidSwitch",
+      "purpose": "Real-time-bidding user identifier shared across the BidSwitch exchange."
+    },
+    {
+      "pattern": "TapAd_",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Tapad",
+      "purpose": "Cross-device identity graph - links your phone, laptop and tablet to one profile."
+    },
+    {
+      "pattern": "sa-user-id",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "StackAdapt",
+      "purpose": "Programmatic advertising user identifier."
+    },
+    {
+      "pattern": "bito",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Beeswax / Bidr",
+      "purpose": "Demand-side platform bidding identifier."
+    },
+    {
+      "pattern": "tluid",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "TripleLift",
+      "purpose": "Native advertising exchange user ID."
+    },
+    {
+      "pattern": "_rxuuid",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "RhythmOne / Unruly",
+      "purpose": "Video advertising exchange user identifier."
+    },
+    {
+      "pattern": "CMID",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Index Exchange (Casale Media)",
+      "purpose": "Ad exchange user identifier."
+    },
+    {
+      "pattern": "CMPS",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Index Exchange (Casale Media)",
+      "purpose": "Ad exchange profile sync state."
+    },
+    {
+      "pattern": "CMPRO",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Index Exchange (Casale Media)",
+      "purpose": "Ad exchange profile data."
+    },
+    {
+      "pattern": "ANON_ID",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Tribal Fusion / Exponential",
+      "purpose": "Ad network anonymous user identifier."
+    },
+    {
+      "pattern": "SEUNCY",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Semasio",
+      "purpose": "Semantic audience targeting identifier."
+    },
+    {
+      "pattern": "ADKUID",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "AdKernel",
+      "purpose": "Programmatic ad platform user ID."
+    },
+    {
+      "pattern": "amuid2",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Amobee",
+      "purpose": "Amobee demand-side platform user identifier."
+    },
+    {
+      "pattern": "sd_amuid2",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Amobee",
+      "purpose": "Amobee sync-domain user identifier."
+    },
+    {
+      "pattern": "psd_amuid2",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Amobee",
+      "purpose": "Amobee partner sync identifier."
+    },
+    {
+      "pattern": "__amc",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Amobee",
+      "purpose": "Amobee prebid consent/config cookie."
+    },
+    {
+      "pattern": "equativUID",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Equativ (Smart AdServer)",
+      "purpose": "Supply-side platform user identifier."
+    },
+    {
+      "pattern": "rubiconUID",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Magnite (Rubicon)",
+      "purpose": "Ad exchange user identifier synced via a partner domain."
+    },
+    {
+      "pattern": "_auid",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Appier",
+      "purpose": "AI advertising platform user identifier."
+    },
+    {
+      "pattern": "vst",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "GumGum",
+      "purpose": "Contextual advertising visitor identifier."
+    },
+    {
+      "pattern": "zync-uuid",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Rezync",
+      "purpose": "Identity sync platform user identifier."
+    },
+    {
+      "pattern": "bounceClientVisit",
+      "match": "prefix",
+      "category": "marketing",
+      "vendor": "Bounce Exchange / Wunderkind",
+      "purpose": "Behavioural retargeting and email capture - triggers popups based on browsing behaviour."
+    },
+    {
+      "pattern": "DotomiTest",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Dotomi / Conversant",
+      "purpose": "Tests whether the ad network can set cookies."
+    },
+    {
+      "pattern": "__eConsent",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Eskimi",
+      "purpose": "Ad platform consent state."
+    },
+    {
+      "pattern": "__eDId",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Eskimi",
+      "purpose": "Ad platform device identifier."
+    },
+    {
+      "pattern": "IDSYNC",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Yahoo Advertising",
+      "purpose": "Cross-network identity synchronisation."
+    },
+    {
+      "pattern": "OAU",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Opera Ads",
+      "purpose": "Opera advertising user identifier."
+    },
+    {
+      "pattern": "__gads",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Google Ad Manager",
+      "purpose": "Ad serving and frequency capping on publisher sites."
+    },
+    {
+      "pattern": "__gpi",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Google Ad Manager",
+      "purpose": "Google Publisher ID for personalised ad delivery."
+    },
+    {
+      "pattern": "__eoi",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "Google Ad Manager",
+      "purpose": "Google ad personalisation opt-in identifier."
+    },
+    {
+      "pattern": "smn_uid",
+      "match": "exact",
+      "category": "marketing",
+      "vendor": "LADSP",
+      "purpose": "Ad platform user identifier."
+    },
+    {
+      "pattern": "GeoIP",
+      "match": "exact",
+      "category": "functional",
+      "vendor": "Wikimedia Foundation",
+      "purpose": "Approximate location used to serve region-appropriate content and banners."
+    },
+    {
+      "pattern": "countryCode",
+      "match": "exact",
+      "category": "functional",
+      "vendor": "Generic",
+      "purpose": "Stores the visitor's detected country for regional content."
+    },
+    {
+      "pattern": "stateCode",
+      "match": "exact",
+      "category": "functional",
+      "vendor": "Generic",
+      "purpose": "Stores the visitor's detected state/region."
+    },
+    {
+      "pattern": "geoData",
+      "match": "exact",
+      "category": "functional",
+      "vendor": "Generic",
+      "purpose": "Cached geolocation lookup result."
+    },
+    {
+      "pattern": "ckns_",
+      "match": "prefix",
+      "category": "functional",
+      "vendor": "BBC",
+      "purpose": "BBC cookie namespace. Generic fallback - specific ckns_ cookies are classified individually above."
     }
   ],
-
   "domain_signatures": [
-
-    { "domain": "google-analytics.com", "category": "analytics", "vendor": "Google Analytics", "purpose": "Analytics data collection endpoint." },
-    { "domain": "analytics.google.com",  "category": "analytics", "vendor": "Google Analytics", "purpose": "GA4 collection endpoint." },
-    { "domain": "googletagmanager.com",  "category": "analytics", "vendor": "Google Tag Manager", "purpose": "Tag container. Itself only a loader, but it injects other trackers - treat its presence as a strong signal." },
-    { "domain": "hotjar.com",            "category": "analytics", "vendor": "Hotjar", "purpose": "Session recording and heatmaps." },
-    { "domain": "mixpanel.com",          "category": "analytics", "vendor": "Mixpanel", "purpose": "Product analytics." },
-    { "domain": "segment.io",            "category": "analytics", "vendor": "Segment", "purpose": "Customer data platform." },
-    { "domain": "segment.com",           "category": "analytics", "vendor": "Segment", "purpose": "Customer data platform." },
-    { "domain": "amplitude.com",         "category": "analytics", "vendor": "Amplitude", "purpose": "Product analytics." },
-    { "domain": "clarity.ms",            "category": "analytics", "vendor": "Microsoft Clarity", "purpose": "Session recording and heatmaps." },
-    { "domain": "scorecardresearch.com", "category": "analytics", "vendor": "Comscore", "purpose": "Audience measurement across publisher sites." },
-    { "domain": "quantserve.com",        "category": "analytics", "vendor": "Quantcast", "purpose": "Audience measurement and segmentation." },
-    { "domain": "newrelic.com",          "category": "analytics", "vendor": "New Relic", "purpose": "Application performance monitoring." },
-    { "domain": "nr-data.net",           "category": "analytics", "vendor": "New Relic", "purpose": "Browser performance beacon endpoint." },
-    { "domain": "sentry.io",             "category": "analytics", "vendor": "Sentry", "purpose": "Client-side error monitoring." },
-    { "domain": "cloudflareinsights.com","category": "analytics", "vendor": "Cloudflare", "purpose": "Privacy-focused web analytics." },
-
-    { "domain": "doubleclick.net",       "category": "marketing", "vendor": "Google DoubleClick", "purpose": "Ad serving and retargeting." },
-    { "domain": "googlesyndication.com", "category": "marketing", "vendor": "Google AdSense", "purpose": "Ad delivery network." },
-    { "domain": "googleadservices.com",  "category": "marketing", "vendor": "Google Ads", "purpose": "Ad click tracking and conversion measurement." },
-    { "domain": "facebook.com",          "category": "marketing", "vendor": "Meta", "purpose": "Social plugins and the Facebook Pixel." },
-    { "domain": "facebook.net",          "category": "marketing", "vendor": "Meta", "purpose": "connect.facebook.net serves the Pixel script." },
-    { "domain": "ads-twitter.com",       "category": "marketing", "vendor": "X (Twitter)", "purpose": "Twitter conversion tracking." },
-    { "domain": "linkedin.com",          "category": "marketing", "vendor": "LinkedIn", "purpose": "Insight Tag for ad targeting and conversion tracking." },
-    { "domain": "licdn.com",             "category": "marketing", "vendor": "LinkedIn", "purpose": "LinkedIn CDN, serves the Insight Tag." },
-    { "domain": "tiktok.com",            "category": "marketing", "vendor": "TikTok", "purpose": "TikTok Pixel." },
-    { "domain": "bing.com",              "category": "marketing", "vendor": "Microsoft Advertising", "purpose": "bat.bing.com is the UET conversion tracking endpoint." },
-    { "domain": "criteo.com",            "category": "marketing", "vendor": "Criteo", "purpose": "Retargeting - shows you ads for products you previously viewed." },
-    { "domain": "criteo.net",            "category": "marketing", "vendor": "Criteo", "purpose": "Retargeting ad delivery." },
-    { "domain": "taboola.com",           "category": "marketing", "vendor": "Taboola", "purpose": "Sponsored content recommendation widgets." },
-    { "domain": "outbrain.com",          "category": "marketing", "vendor": "Outbrain", "purpose": "Sponsored content recommendation widgets." },
-    { "domain": "adnxs.com",             "category": "marketing", "vendor": "AppNexus / Xandr", "purpose": "Real-time bidding ad exchange." },
-    { "domain": "pubmatic.com",          "category": "marketing", "vendor": "PubMatic", "purpose": "Programmatic ad exchange." },
-    { "domain": "rubiconproject.com",    "category": "marketing", "vendor": "Magnite (Rubicon)", "purpose": "Programmatic ad exchange." },
-    { "domain": "openx.net",             "category": "marketing", "vendor": "OpenX", "purpose": "Programmatic ad exchange." },
-    { "domain": "adsrvr.org",            "category": "marketing", "vendor": "The Trade Desk", "purpose": "Demand-side platform for programmatic advertising." },
-    { "domain": "amazon-adsystem.com",   "category": "marketing", "vendor": "Amazon Advertising", "purpose": "Amazon's ad delivery and retargeting network." },
-    { "domain": "pinterest.com",         "category": "marketing", "vendor": "Pinterest", "purpose": "Pinterest Tag conversion tracking." },
-    { "domain": "snapchat.com",          "category": "marketing", "vendor": "Snap", "purpose": "Snap Pixel conversion tracking." },
-    { "domain": "redditstatic.com",      "category": "marketing", "vendor": "Reddit", "purpose": "Reddit Pixel conversion tracking." },
-    { "domain": "hubspot.com",           "category": "marketing", "vendor": "HubSpot", "purpose": "Marketing automation and lead tracking." },
-    { "domain": "hs-scripts.com",        "category": "marketing", "vendor": "HubSpot", "purpose": "HubSpot tracking script host." },
-
-    { "domain": "intercom.io",           "category": "functional", "vendor": "Intercom", "purpose": "Live chat widget." },
-    { "domain": "zdassets.com",          "category": "functional", "vendor": "Zendesk", "purpose": "Support widget assets." },
-    { "domain": "fonts.googleapis.com",  "category": "functional", "vendor": "Google Fonts", "purpose": "Web font delivery. Note: a 2022 Munich court ruling held that embedding Google Fonts leaks the visitor's IP to Google and breaches GDPR - self-hosting is the safe option." },
-    { "domain": "fonts.gstatic.com",     "category": "functional", "vendor": "Google Fonts", "purpose": "Web font file delivery. Same GDPR caveat as above." },
-    { "domain": "youtube.com",           "category": "marketing",  "vendor": "Google / YouTube", "purpose": "Embedded video. Standard embeds set advertising cookies - youtube-nocookie.com is the privacy-preserving alternative." },
-    { "domain": "vimeo.com",             "category": "functional", "vendor": "Vimeo", "purpose": "Embedded video player." },
-
-    { "domain": "cdnjs.cloudflare.com",  "category": "necessary", "vendor": "Cloudflare CDN", "purpose": "Serves JavaScript libraries the site needs to run." },
-    { "domain": "jsdelivr.net",          "category": "necessary", "vendor": "jsDelivr CDN", "purpose": "Open-source package delivery." },
-    { "domain": "unpkg.com",             "category": "necessary", "vendor": "unpkg CDN", "purpose": "npm package delivery." },
-    { "domain": "recaptcha.net",         "category": "necessary", "vendor": "Google reCAPTCHA", "purpose": "Bot protection on forms. Security function, so consent-exempt - though its data flows to Google remain contested." }
+    {
+      "domain": "google-analytics.com",
+      "category": "analytics",
+      "vendor": "Google Analytics",
+      "purpose": "Analytics data collection endpoint."
+    },
+    {
+      "domain": "analytics.google.com",
+      "category": "analytics",
+      "vendor": "Google Analytics",
+      "purpose": "GA4 collection endpoint."
+    },
+    {
+      "domain": "googletagmanager.com",
+      "category": "analytics",
+      "vendor": "Google Tag Manager",
+      "purpose": "Tag container. Itself only a loader, but it injects other trackers - treat its presence as a strong signal."
+    },
+    {
+      "domain": "hotjar.com",
+      "category": "analytics",
+      "vendor": "Hotjar",
+      "purpose": "Session recording and heatmaps."
+    },
+    {
+      "domain": "mixpanel.com",
+      "category": "analytics",
+      "vendor": "Mixpanel",
+      "purpose": "Product analytics."
+    },
+    {
+      "domain": "segment.io",
+      "category": "analytics",
+      "vendor": "Segment",
+      "purpose": "Customer data platform."
+    },
+    {
+      "domain": "segment.com",
+      "category": "analytics",
+      "vendor": "Segment",
+      "purpose": "Customer data platform."
+    },
+    {
+      "domain": "amplitude.com",
+      "category": "analytics",
+      "vendor": "Amplitude",
+      "purpose": "Product analytics."
+    },
+    {
+      "domain": "clarity.ms",
+      "category": "analytics",
+      "vendor": "Microsoft Clarity",
+      "purpose": "Session recording and heatmaps."
+    },
+    {
+      "domain": "scorecardresearch.com",
+      "category": "analytics",
+      "vendor": "Comscore",
+      "purpose": "Audience measurement across publisher sites."
+    },
+    {
+      "domain": "quantserve.com",
+      "category": "analytics",
+      "vendor": "Quantcast",
+      "purpose": "Audience measurement and segmentation."
+    },
+    {
+      "domain": "newrelic.com",
+      "category": "analytics",
+      "vendor": "New Relic",
+      "purpose": "Application performance monitoring."
+    },
+    {
+      "domain": "nr-data.net",
+      "category": "analytics",
+      "vendor": "New Relic",
+      "purpose": "Browser performance beacon endpoint."
+    },
+    {
+      "domain": "sentry.io",
+      "category": "analytics",
+      "vendor": "Sentry",
+      "purpose": "Client-side error monitoring."
+    },
+    {
+      "domain": "cloudflareinsights.com",
+      "category": "analytics",
+      "vendor": "Cloudflare",
+      "purpose": "Privacy-focused web analytics."
+    },
+    {
+      "domain": "doubleclick.net",
+      "category": "marketing",
+      "vendor": "Google DoubleClick",
+      "purpose": "Ad serving and retargeting."
+    },
+    {
+      "domain": "googlesyndication.com",
+      "category": "marketing",
+      "vendor": "Google AdSense",
+      "purpose": "Ad delivery network."
+    },
+    {
+      "domain": "googleadservices.com",
+      "category": "marketing",
+      "vendor": "Google Ads",
+      "purpose": "Ad click tracking and conversion measurement."
+    },
+    {
+      "domain": "facebook.com",
+      "category": "marketing",
+      "vendor": "Meta",
+      "purpose": "Social plugins and the Facebook Pixel."
+    },
+    {
+      "domain": "facebook.net",
+      "category": "marketing",
+      "vendor": "Meta",
+      "purpose": "connect.facebook.net serves the Pixel script."
+    },
+    {
+      "domain": "ads-twitter.com",
+      "category": "marketing",
+      "vendor": "X (Twitter)",
+      "purpose": "Twitter conversion tracking."
+    },
+    {
+      "domain": "linkedin.com",
+      "category": "marketing",
+      "vendor": "LinkedIn",
+      "purpose": "Insight Tag for ad targeting and conversion tracking."
+    },
+    {
+      "domain": "licdn.com",
+      "category": "marketing",
+      "vendor": "LinkedIn",
+      "purpose": "LinkedIn CDN, serves the Insight Tag."
+    },
+    {
+      "domain": "tiktok.com",
+      "category": "marketing",
+      "vendor": "TikTok",
+      "purpose": "TikTok Pixel."
+    },
+    {
+      "domain": "bing.com",
+      "category": "marketing",
+      "vendor": "Microsoft Advertising",
+      "purpose": "bat.bing.com is the UET conversion tracking endpoint."
+    },
+    {
+      "domain": "criteo.com",
+      "category": "marketing",
+      "vendor": "Criteo",
+      "purpose": "Retargeting - shows you ads for products you previously viewed."
+    },
+    {
+      "domain": "criteo.net",
+      "category": "marketing",
+      "vendor": "Criteo",
+      "purpose": "Retargeting ad delivery."
+    },
+    {
+      "domain": "taboola.com",
+      "category": "marketing",
+      "vendor": "Taboola",
+      "purpose": "Sponsored content recommendation widgets."
+    },
+    {
+      "domain": "outbrain.com",
+      "category": "marketing",
+      "vendor": "Outbrain",
+      "purpose": "Sponsored content recommendation widgets."
+    },
+    {
+      "domain": "adnxs.com",
+      "category": "marketing",
+      "vendor": "AppNexus / Xandr",
+      "purpose": "Real-time bidding ad exchange."
+    },
+    {
+      "domain": "pubmatic.com",
+      "category": "marketing",
+      "vendor": "PubMatic",
+      "purpose": "Programmatic ad exchange."
+    },
+    {
+      "domain": "rubiconproject.com",
+      "category": "marketing",
+      "vendor": "Magnite (Rubicon)",
+      "purpose": "Programmatic ad exchange."
+    },
+    {
+      "domain": "openx.net",
+      "category": "marketing",
+      "vendor": "OpenX",
+      "purpose": "Programmatic ad exchange."
+    },
+    {
+      "domain": "adsrvr.org",
+      "category": "marketing",
+      "vendor": "The Trade Desk",
+      "purpose": "Demand-side platform for programmatic advertising."
+    },
+    {
+      "domain": "amazon-adsystem.com",
+      "category": "marketing",
+      "vendor": "Amazon Advertising",
+      "purpose": "Amazon's ad delivery and retargeting network."
+    },
+    {
+      "domain": "pinterest.com",
+      "category": "marketing",
+      "vendor": "Pinterest",
+      "purpose": "Pinterest Tag conversion tracking."
+    },
+    {
+      "domain": "snapchat.com",
+      "category": "marketing",
+      "vendor": "Snap",
+      "purpose": "Snap Pixel conversion tracking."
+    },
+    {
+      "domain": "redditstatic.com",
+      "category": "marketing",
+      "vendor": "Reddit",
+      "purpose": "Reddit Pixel conversion tracking."
+    },
+    {
+      "domain": "hubspot.com",
+      "category": "marketing",
+      "vendor": "HubSpot",
+      "purpose": "Marketing automation and lead tracking."
+    },
+    {
+      "domain": "hs-scripts.com",
+      "category": "marketing",
+      "vendor": "HubSpot",
+      "purpose": "HubSpot tracking script host."
+    },
+    {
+      "domain": "intercom.io",
+      "category": "functional",
+      "vendor": "Intercom",
+      "purpose": "Live chat widget."
+    },
+    {
+      "domain": "zdassets.com",
+      "category": "functional",
+      "vendor": "Zendesk",
+      "purpose": "Support widget assets."
+    },
+    {
+      "domain": "fonts.googleapis.com",
+      "category": "functional",
+      "vendor": "Google Fonts",
+      "purpose": "Web font delivery. Note: a 2022 Munich court ruling held that embedding Google Fonts leaks the visitor's IP to Google and breaches GDPR - self-hosting is the safe option."
+    },
+    {
+      "domain": "fonts.gstatic.com",
+      "category": "functional",
+      "vendor": "Google Fonts",
+      "purpose": "Web font file delivery. Same GDPR caveat as above."
+    },
+    {
+      "domain": "youtube.com",
+      "category": "marketing",
+      "vendor": "Google / YouTube",
+      "purpose": "Embedded video. Standard embeds set advertising cookies - youtube-nocookie.com is the privacy-preserving alternative."
+    },
+    {
+      "domain": "vimeo.com",
+      "category": "functional",
+      "vendor": "Vimeo",
+      "purpose": "Embedded video player."
+    },
+    {
+      "domain": "cdnjs.cloudflare.com",
+      "category": "necessary",
+      "vendor": "Cloudflare CDN",
+      "purpose": "Serves JavaScript libraries the site needs to run."
+    },
+    {
+      "domain": "jsdelivr.net",
+      "category": "necessary",
+      "vendor": "jsDelivr CDN",
+      "purpose": "Open-source package delivery."
+    },
+    {
+      "domain": "unpkg.com",
+      "category": "necessary",
+      "vendor": "unpkg CDN",
+      "purpose": "npm package delivery."
+    },
+    {
+      "domain": "recaptcha.net",
+      "category": "necessary",
+      "vendor": "Google reCAPTCHA",
+      "purpose": "Bot protection on forms. Security function, so consent-exempt - though its data flows to Google remain contested."
+    },
+    {
+      "domain": "chartbeat.com",
+      "category": "analytics",
+      "vendor": "Chartbeat",
+      "purpose": "Real-time publisher readership analytics."
+    },
+    {
+      "domain": "chartbeat.net",
+      "category": "analytics",
+      "vendor": "Chartbeat",
+      "purpose": "Chartbeat data collection endpoint."
+    },
+    {
+      "domain": "dotmetrics.net",
+      "category": "analytics",
+      "vendor": "DotMetrics",
+      "purpose": "European audience measurement panel."
+    },
+    {
+      "domain": "optimizely.com",
+      "category": "analytics",
+      "vendor": "Optimizely",
+      "purpose": "A/B testing and experimentation platform."
+    },
+    {
+      "domain": "speedcurve.com",
+      "category": "analytics",
+      "vendor": "SpeedCurve",
+      "purpose": "Real User Monitoring for site performance."
+    },
+    {
+      "domain": "imrworldwide.com",
+      "category": "analytics",
+      "vendor": "Nielsen",
+      "purpose": "Nielsen Digital Content Ratings measurement."
+    },
+    {
+      "domain": "mediamelon.com",
+      "category": "analytics",
+      "vendor": "MediaMelon",
+      "purpose": "Video streaming quality analytics."
+    },
+    {
+      "domain": "litix.io",
+      "category": "analytics",
+      "vendor": "Mux Data",
+      "purpose": "Video playback performance analytics."
+    },
+    {
+      "domain": "edigitalsurvey.com",
+      "category": "analytics",
+      "vendor": "eDigitalResearch",
+      "purpose": "On-site visitor survey tool."
+    },
+    {
+      "domain": "privacy-mgmt.com",
+      "category": "necessary",
+      "vendor": "Sourcepoint",
+      "purpose": "Consent management platform - serves the consent banner itself."
+    },
+    {
+      "domain": "cookielaw.org",
+      "category": "necessary",
+      "vendor": "OneTrust",
+      "purpose": "OneTrust consent management platform CDN."
+    },
+    {
+      "domain": "onetrust.com",
+      "category": "necessary",
+      "vendor": "OneTrust",
+      "purpose": "Consent management platform."
+    },
+    {
+      "domain": "cookiebot.com",
+      "category": "necessary",
+      "vendor": "Cookiebot",
+      "purpose": "Consent management platform."
+    },
+    {
+      "domain": "usercentrics.eu",
+      "category": "necessary",
+      "vendor": "Usercentrics",
+      "purpose": "Consent management platform."
+    },
+    {
+      "domain": "didomi.io",
+      "category": "necessary",
+      "vendor": "Didomi",
+      "purpose": "Consent management platform."
+    },
+    {
+      "domain": "bbci.co.uk",
+      "category": "necessary",
+      "vendor": "BBC",
+      "purpose": "BBC's own static asset and image CDN. First-party infrastructure despite the different domain."
+    },
+    {
+      "domain": "permutive.com",
+      "category": "marketing",
+      "vendor": "Permutive",
+      "purpose": "Publisher data management platform for audience segmentation."
+    },
+    {
+      "domain": "prmutv.co",
+      "category": "marketing",
+      "vendor": "Permutive",
+      "purpose": "Permutive identity endpoint."
+    },
+    {
+      "domain": "cxense.com",
+      "category": "marketing",
+      "vendor": "Piano / Cxense",
+      "purpose": "Audience data platform and identity sync."
+    },
+    {
+      "domain": "piano.io",
+      "category": "marketing",
+      "vendor": "Piano",
+      "purpose": "Audience segmentation, paywall and personalisation."
+    },
+    {
+      "domain": "tinypass.com",
+      "category": "marketing",
+      "vendor": "Piano (Tinypass)",
+      "purpose": "Paywall and audience platform."
+    },
+    {
+      "domain": "crwdcntrl.net",
+      "category": "marketing",
+      "vendor": "Lotame",
+      "purpose": "Data management platform - Lotame's collection endpoint."
+    },
+    {
+      "domain": "id5-sync.com",
+      "category": "marketing",
+      "vendor": "ID5",
+      "purpose": "Shared advertising identity graph."
+    },
+    {
+      "domain": "rlcdn.com",
+      "category": "marketing",
+      "vendor": "LiveRamp",
+      "purpose": "Identity resolution and data onboarding."
+    },
+    {
+      "domain": "pippio.com",
+      "category": "marketing",
+      "vendor": "LiveRamp",
+      "purpose": "LiveRamp identity sync endpoint."
+    },
+    {
+      "domain": "bidswitch.net",
+      "category": "marketing",
+      "vendor": "BidSwitch",
+      "purpose": "Programmatic bid routing between exchanges."
+    },
+    {
+      "domain": "tapad.com",
+      "category": "marketing",
+      "vendor": "Tapad",
+      "purpose": "Cross-device identity graph."
+    },
+    {
+      "domain": "stackadapt.com",
+      "category": "marketing",
+      "vendor": "StackAdapt",
+      "purpose": "Programmatic advertising demand-side platform."
+    },
+    {
+      "domain": "bidr.io",
+      "category": "marketing",
+      "vendor": "Beeswax / Bidr",
+      "purpose": "Bidding platform identity sync."
+    },
+    {
+      "domain": "3lift.com",
+      "category": "marketing",
+      "vendor": "TripleLift",
+      "purpose": "Native advertising exchange."
+    },
+    {
+      "domain": "1rx.io",
+      "category": "marketing",
+      "vendor": "RhythmOne",
+      "purpose": "Video and display ad exchange."
+    },
+    {
+      "domain": "unrulymedia.com",
+      "category": "marketing",
+      "vendor": "Unruly",
+      "purpose": "Video advertising platform."
+    },
+    {
+      "domain": "casalemedia.com",
+      "category": "marketing",
+      "vendor": "Index Exchange",
+      "purpose": "Programmatic ad exchange."
+    },
+    {
+      "domain": "tribalfusion.com",
+      "category": "marketing",
+      "vendor": "Exponential",
+      "purpose": "Display ad network."
+    },
+    {
+      "domain": "semasio.net",
+      "category": "marketing",
+      "vendor": "Semasio",
+      "purpose": "Semantic audience targeting."
+    },
+    {
+      "domain": "adkernel.com",
+      "category": "marketing",
+      "vendor": "AdKernel",
+      "purpose": "White-label programmatic ad platform."
+    },
+    {
+      "domain": "mathtag.com",
+      "category": "marketing",
+      "vendor": "MediaMath",
+      "purpose": "Demand-side platform user sync."
+    },
+    {
+      "domain": "a-mo.net",
+      "category": "marketing",
+      "vendor": "Amobee",
+      "purpose": "Demand-side platform and identity sync."
+    },
+    {
+      "domain": "smartadserver.com",
+      "category": "marketing",
+      "vendor": "Equativ (Smart AdServer)",
+      "purpose": "Supply-side ad platform."
+    },
+    {
+      "domain": "wknd.ai",
+      "category": "marketing",
+      "vendor": "Equativ",
+      "purpose": "Ad platform identity sync endpoint."
+    },
+    {
+      "domain": "appier.net",
+      "category": "marketing",
+      "vendor": "Appier",
+      "purpose": "AI-driven advertising platform."
+    },
+    {
+      "domain": "gumgum.com",
+      "category": "marketing",
+      "vendor": "GumGum",
+      "purpose": "Contextual in-image advertising."
+    },
+    {
+      "domain": "ladsp.com",
+      "category": "marketing",
+      "vendor": "LADSP",
+      "purpose": "Programmatic ad platform."
+    },
+    {
+      "domain": "rezync.com",
+      "category": "marketing",
+      "vendor": "Rezync",
+      "purpose": "Identity synchronisation platform."
+    },
+    {
+      "domain": "bounceexchange.com",
+      "category": "marketing",
+      "vendor": "Bounce Exchange / Wunderkind",
+      "purpose": "Behavioural retargeting and popup triggering."
+    },
+    {
+      "domain": "bouncex.net",
+      "category": "marketing",
+      "vendor": "Bounce Exchange / Wunderkind",
+      "purpose": "Behavioural event collection."
+    },
+    {
+      "domain": "dotomi.com",
+      "category": "marketing",
+      "vendor": "Dotomi / Conversant",
+      "purpose": "Personalised retargeting network."
+    },
+    {
+      "domain": "eskimi.com",
+      "category": "marketing",
+      "vendor": "Eskimi",
+      "purpose": "Programmatic advertising platform."
+    },
+    {
+      "domain": "creativecdn.com",
+      "category": "marketing",
+      "vendor": "RTB House",
+      "purpose": "Retargeting via deep-learning ad delivery."
+    },
+    {
+      "domain": "turn.com",
+      "category": "marketing",
+      "vendor": "Amobee (Turn)",
+      "purpose": "Demand-side platform."
+    },
+    {
+      "domain": "adform.net",
+      "category": "marketing",
+      "vendor": "Adform",
+      "purpose": "Programmatic advertising platform."
+    },
+    {
+      "domain": "demdex.net",
+      "category": "marketing",
+      "vendor": "Adobe Audience Manager",
+      "purpose": "Adobe's data management platform - builds cross-site audience segments."
+    },
+    {
+      "domain": "ml314.com",
+      "category": "marketing",
+      "vendor": "Bombora",
+      "purpose": "B2B intent-data collection."
+    },
+    {
+      "domain": "ugdturner.com",
+      "category": "marketing",
+      "vendor": "Warner Bros. Discovery",
+      "purpose": "WBD user-graph identity service."
+    },
+    {
+      "domain": "adx.opera.com",
+      "category": "marketing",
+      "vendor": "Opera Ads",
+      "purpose": "Opera advertising exchange."
+    },
+    {
+      "domain": "oa.opera.com",
+      "category": "marketing",
+      "vendor": "Opera Ads",
+      "purpose": "Opera ad delivery."
+    },
+    {
+      "domain": "adtrafficquality.google",
+      "category": "marketing",
+      "vendor": "Google",
+      "purpose": "Ad traffic quality and invalid-traffic detection for Google Ads."
+    },
+    {
+      "domain": "ad-delivery.net",
+      "category": "marketing",
+      "vendor": "Google",
+      "purpose": "Google ad delivery endpoint."
+    },
+    {
+      "domain": "the-ozone-project.com",
+      "category": "marketing",
+      "vendor": "The Ozone Project",
+      "purpose": "UK publisher advertising consortium running Prebid auctions."
+    },
+    {
+      "domain": "btloader.com",
+      "category": "marketing",
+      "vendor": "Blockthrough",
+      "purpose": "Ad-block recovery and ad delivery."
+    },
+    {
+      "domain": "stickyadstv.com",
+      "category": "marketing",
+      "vendor": "Equativ (StickyADS)",
+      "purpose": "Video advertising platform."
+    },
+    {
+      "domain": "simpli.fi",
+      "category": "marketing",
+      "vendor": "Simpli.fi",
+      "purpose": "Localised programmatic advertising."
+    },
+    {
+      "domain": "fastclick.net",
+      "category": "marketing",
+      "vendor": "Conversant",
+      "purpose": "Display ad network."
+    },
+    {
+      "domain": "temu.com",
+      "category": "marketing",
+      "vendor": "Temu",
+      "purpose": "Advertiser landing/tracking domain."
+    },
+    {
+      "domain": "yahoo.com",
+      "category": "marketing",
+      "vendor": "Yahoo Advertising",
+      "purpose": "Yahoo ad network identity sync (ups.analytics.yahoo.com)."
+    },
+    {
+      "domain": "doubleverify.com",
+      "category": "marketing",
+      "vendor": "DoubleVerify",
+      "purpose": "Ad verification and brand-safety measurement."
+    },
+    {
+      "domain": "dv.tech",
+      "category": "marketing",
+      "vendor": "DoubleVerify",
+      "purpose": "DoubleVerify measurement endpoint."
+    },
+    {
+      "domain": "adsafeprotected.com",
+      "category": "marketing",
+      "vendor": "Integral Ad Science",
+      "purpose": "Ad viewability and brand-safety verification."
+    },
+    {
+      "domain": "webcontentassessor.com",
+      "category": "marketing",
+      "vendor": "Web Content Assessor",
+      "purpose": "Page content classification for ad targeting and brand safety."
+    },
+    {
+      "domain": "dns-finder.com",
+      "category": "marketing",
+      "vendor": "Unknown adtech",
+      "purpose": "Observed in ad-loading chains; classified as advertising infrastructure."
+    },
+    {
+      "domain": "mybbc-analytics.files.bbci.co.uk",
+      "category": "analytics",
+      "vendor": "BBC",
+      "purpose": "BBC's own analytics collection endpoint. MORE SPECIFIC than the bbci.co.uk asset entry, so it must win - see sorted_domain_signatures()."
+    },
+    {
+      "domain": "bbc.co.uk",
+      "category": "necessary",
+      "vendor": "BBC",
+      "purpose": "BBC first-party infrastructure (identity, APIs). Not a tracker."
+    },
+    {
+      "domain": "cnn.io",
+      "category": "necessary",
+      "vendor": "CNN / WBD",
+      "purpose": "CNN first-party API infrastructure."
+    },
+    {
+      "domain": "ctnsnet.com",
+      "category": "marketing",
+      "vendor": "Conversant",
+      "purpose": "Ad network identity sync."
+    }
   ],
-
   "generic_patterns": [
     {
       "pattern": "^(php|jsp|asp)?[-_]?sess(ion)?[-_]?id$",

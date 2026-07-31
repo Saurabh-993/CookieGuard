@@ -46,6 +46,7 @@ from classifier import (  # noqa: E402  (import after path setup, deliberately)
     classify_scan,
     calculate_compliance_score,
     load_trackers,
+    sorted_domain_signatures,
     _domain_matches,
     _registrable_domain,
 )
@@ -218,6 +219,54 @@ def test_domain_match_for_unknown_name(trackers):
     assert result["category"] == "marketing"
     assert "domain" in result["matched_by"]
     assert result["confidence"] == "medium"
+
+
+def test_domain_signatures_sorted_most_specific_first(trackers):
+    """Longest domain must come first, so specific entries beat general ones."""
+    lengths = [len(s["domain"]) for s in sorted_domain_signatures(trackers)]
+    assert lengths == sorted(lengths, reverse=True)
+
+
+def test_more_specific_domain_wins(trackers):
+    """
+    REGRESSION TEST — found on live bbc.com data.
+
+    `mybbc-analytics.files.bbci.co.uk` was being classified `necessary` because
+    the shorter `bbci.co.uk` entry matched first. A domain with "analytics" in
+    its name was landing in the one consent-exempt category.
+
+    Same bug class as test_longest_prefix_wins: whichever entry sits earlier in
+    the data file wins, so overlapping entries need an explicit specificity
+    rule.
+    """
+    specific = classify_cookie(
+        make_cookie("x", domain="mybbc-analytics.files.bbci.co.uk", party="third"),
+        trackers,
+    )
+    general = classify_cookie(
+        make_cookie("x", domain="static.files.bbci.co.uk", party="third"),
+        trackers,
+    )
+    assert specific["category"] == "analytics"   # specific entry wins
+    assert general["category"] == "necessary"    # general entry still works
+
+
+def test_scan_domain_enrichment_uses_specificity(trackers):
+    """The same ordering rule must apply to third-party request domains."""
+    result = classify_scan(
+        {
+            "domain": "bbc.com",
+            "cookies": [],
+            "third_party_domains": [
+                {"domain": "mybbc-analytics.files.bbci.co.uk", "request_count": 3},
+                {"domain": "static.files.bbci.co.uk", "request_count": 70},
+            ],
+        },
+        trackers,
+    )
+    by_domain = {d["domain"]: d["category"] for d in result["third_party_domains"]}
+    assert by_domain["mybbc-analytics.files.bbci.co.uk"] == "analytics"
+    assert by_domain["static.files.bbci.co.uk"] == "necessary"
 
 
 def test_generic_session_pattern(trackers):
