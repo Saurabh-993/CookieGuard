@@ -43,3 +43,11 @@ pydantic>=2.9
 
 # --- Testing (used by GitHub Actions CI in Phase 6) ---
 pytest>=8.3
+
+# FastAPI's TestClient needs an HTTP client library to drive the app in-process.
+# Which one depends on your Starlette version:
+#   Starlette < 0.49  ->  httpx
+#   Starlette >= 0.49 ->  httpx2   (it raises a clear error telling you which)
+# Installing both is harmless and means the tests run on either version.
+httpx>=0.27
+httpx2>=2.0

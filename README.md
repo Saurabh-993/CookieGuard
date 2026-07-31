@@ -180,12 +180,13 @@ CookieGuard/
 │
 ├── tests/
 │   ├── test_classifier.py   # 33 tests for the classification logic
-│   └── test_db.py           # 36 tests for the database layer
+│   ├── test_db.py           # 36 tests for the database layer
+│   └── test_api.py          # 45 tests for the REST API
 │
 ├── api/
 │   ├── db.py                # SQLite: schema, transactional writes, all queries
-│   ├── main.py              # Phase 3 — FastAPI app; defines all REST endpoints
-│   └── schemas.py           # Phase 3 — Pydantic models describing request/response JSON shapes
+│   ├── main.py              # FastAPI app: 10 REST endpoints + SSRF protection
+│   └── schemas.py           # Pydantic models describing request/response JSON shapes
 │
 ├── frontend/
 │   ├── index.html           # Phase 4 — dashboard page structure
@@ -423,11 +424,64 @@ Sample report:
 pytest -v
 ```
 
-### Run the API (Phase 3 — coming soon)
+### Run the API (Phase 3 — available now)
 
 ```bash
 uvicorn api.main:app --reload
-# Interactive docs: http://127.0.0.1:8000/docs
+```
+
+Then open **http://127.0.0.1:8000/docs** — an interactive API console,
+generated automatically from the code. You can run every endpoint from the
+browser.
+
+**Windows PowerShell** has two traps here:
+
+1. Bare `curl` is an alias for `Invoke-WebRequest`, which takes completely
+   different arguments. Type `curl.exe` to get the real curl (it ships with
+   Windows 10+).
+2. `Invoke-RestMethod` **throws a terminating error on any non-2xx status**.
+   So a deliberate `400` — like the SSRF guard rejecting a URL — appears as a
+   red PowerShell exception even though the request worked perfectly.
+
+```powershell
+curl.exe http://127.0.0.1:8000/health
+curl.exe http://127.0.0.1:8000/api/domains
+
+curl.exe -X POST http://127.0.0.1:8000/api/scan `
+  -H "Content-Type: application/json" `
+  -d "{\"url\": \"https://example.com\", \"wait_seconds\": 5}"
+```
+
+If you prefer the PowerShell cmdlet, catch the error to read the body:
+
+```powershell
+try {
+  Invoke-RestMethod -Method POST http://127.0.0.1:8000/api/scan `
+    -ContentType "application/json" `
+    -Body '{"url": "https://example.com"}'
+} catch {
+  $_.ErrorDetails.Message      # the response body lives here on an error status
+}
+```
+
+**Simplest of all:** use the `/docs` page. Click an endpoint → "Try it out" →
+"Execute". Error responses render in a readable panel, with no shell quoting.
+
+**macOS / Linux:**
+
+```bash
+curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:8000/api/domains
+
+curl -X POST http://127.0.0.1:8000/api/scan \
+     -H "Content-Type: application/json" \
+     -d '{"url": "https://example.com", "wait_seconds": 5}'
+```
+
+Point the API at a different database with an environment variable:
+
+```bash
+COOKIEGUARD_DB=/path/to/other.db uvicorn api.main:app
 ```
 
 ### Open the dashboard (Phase 4 — coming soon)
@@ -440,20 +494,28 @@ uvicorn api.main:app --reload
 
 ## 🔌 API Documentation
 
-> Status: **planned for Phase 3.** Documented here up front so the contract is
-> fixed before the code is written.
-
 Base URL: `http://127.0.0.1:8000`
 
 | Method | Endpoint | Purpose |
 |--------|----------|---------|
-| `POST` | `/api/scan` | Trigger a new scan of a URL |
+| `GET` | `/` | API info and links |
+| `GET` | `/health` | Liveness + database check (used by Docker & CI) |
+| `POST` | `/api/scan` | Trigger a new scan. `201 Created`. |
 | `GET` | `/api/domains` | List every domain ever scanned |
-| `GET` | `/api/domains/{domain}/scans` | Scan history for one domain |
+| `GET` | `/api/domains/{domain}/scans` | Scan history, newest first. `?limit=` |
+| `GET` | `/api/domains/{domain}/latest` | Most recent scan, full detail |
 | `GET` | `/api/scans/{scan_id}` | Full result of one scan |
-| `GET` | `/api/scans/{scan_id}/cookies` | Cookie inventory for one scan |
-| `GET` | `/api/report/{domain}` | Compliance summary + score for a domain |
-| `GET` | `/health` | Liveness check (used by Docker & CI) |
+| `GET` | `/api/scans/{scan_id}/cookies` | Cookie inventory. `?category=` filter |
+| `DELETE` | `/api/scans/{scan_id}` | Delete a scan. `204 No Content`. |
+| `GET` | `/api/report/{domain}` | Compliance summary, vendors, history, trend |
+
+### Security note
+
+`POST /api/scan` makes the **server** fetch a user-supplied URL, which is an
+SSRF risk. Requests to `localhost`, private network ranges, `.local`
+hostnames, non-HTTP schemes, and the cloud instance metadata endpoint
+(`169.254.169.254`) are rejected with `400`. Hostnames are resolved before
+checking, since an attacker controls their own DNS. See `docs/TEACHING.md` §50.
 
 ### `POST /api/scan`
 
@@ -514,8 +576,8 @@ Once the API exists, FastAPI will auto-generate live, testable documentation at
 | **1** | Project setup, documentation, Playwright scanner | ✅ **Done** |
 | **2a** | Classifier + `trackers.json` + tests | ✅ **Done** |
 | **2b** | SQLite database + Public Suffix List fix | ✅ **Done** |
-| **3** | FastAPI REST endpoints | ⬜ Next |
-| **4** | Dashboard (tables + charts + audit report) | ⬜ Pending |
+| **3** | FastAPI REST endpoints | ✅ **Done** |
+| **4** | Dashboard (tables + charts + audit report) | ⬜ Next |
 | **5** | Consent banner | ⬜ Pending |
 | **6** | Docker + GitHub Actions CI/CD | ⬜ Pending |
 | **7** | AWS deployment | ⬜ Pending |

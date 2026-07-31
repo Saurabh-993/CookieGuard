@@ -51,6 +51,7 @@ RUN IT LIKE THIS
 
 import argparse
 import json
+import os
 import sqlite3          # the SQLite driver, built into Python
 import sys
 from datetime import datetime, timezone
@@ -68,7 +69,47 @@ from classifier import classify_scan, load_trackers  # noqa: E402
 
 # The database is one file on disk. We put it in data/ (which .gitignore
 # excludes, because a database is generated output, not source code).
-DEFAULT_DB_PATH = Path(__file__).parent.parent / "data" / "cookieguard.db"
+#
+# The location can be overridden with the COOKIEGUARD_DB environment variable.
+# Two reasons that matters:
+#   * Docker (Phase 6) mounts the database on a volume at a different path
+#   * tests point it at a throwaway file so they never touch real data
+#
+# Reading configuration from the environment rather than hardcoding it is one
+# of the "twelve-factor app" principles, and it's what lets the same image run
+# in dev, CI and production unchanged.
+DEFAULT_DB_PATH = Path(
+    os.environ.get("COOKIEGUARD_DB")
+    or (Path(__file__).parent.parent / "data" / "cookieguard.db")
+)
+
+
+def _resolve_db(db_path=None) -> Path:
+    """
+    Work out which database file to use.
+
+    ⚠ WHY THIS FUNCTION EXISTS — a real Python gotcha.
+
+    The obvious way to write these functions would be:
+
+        def list_domains(db_path=DEFAULT_DB_PATH):    # ← looks fine, isn't
+
+    Python evaluates default arguments ONCE, when the `def` line is executed
+    at import time. So `db_path` gets permanently bound to whatever
+    DEFAULT_DB_PATH was at import. Changing DEFAULT_DB_PATH afterwards — which
+    is exactly what a test does — has no effect at all, and the test silently
+    reads and writes the real database.
+
+    Using `db_path=None` and resolving inside the function means the lookup
+    happens at CALL time, so overrides work.
+
+    This is the same trap as the notorious `def f(items=[])`: the list is
+    created once and shared by every call. Late-binding defaults is the fix
+    for both.
+    """
+    if db_path is not None:
+        return Path(db_path)
+    return DEFAULT_DB_PATH
 
 
 # ---------------------------------------------------------------------------
@@ -295,7 +336,7 @@ CREATE INDEX IF NOT EXISTS idx_tpd_scan_id ON third_party_domains(scan_id);
 # CONNECTION HANDLING
 # ---------------------------------------------------------------------------
 
-def get_connection(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def get_connection(db_path=None) -> sqlite3.Connection:
     """
     Open a connection to the database file, configured the way we want it.
 
@@ -332,7 +373,7 @@ def get_connection(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
        This is a genuinely notorious gotcha and a fair interview question.
     """
     # Create the parent folder if it doesn't exist yet, so a fresh clone works.
-    db_path = Path(db_path)
+    db_path = _resolve_db(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
 
     conn = sqlite3.connect(str(db_path))
@@ -341,7 +382,7 @@ def get_connection(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     return conn
 
 
-def init_db(db_path: Path = DEFAULT_DB_PATH) -> None:
+def init_db(db_path=None) -> None:
     """
     Create the database file and all tables/indexes if they don't exist.
 
@@ -420,7 +461,7 @@ def get_or_create_domain(conn: sqlite3.Connection, domain: str) -> int:
     return cur.lastrowid
 
 
-def save_scan(scan_result: dict, db_path: Path = DEFAULT_DB_PATH) -> int:
+def save_scan(scan_result: dict, db_path=None) -> int:
     """
     Store one complete scan and return its new scan_id.
 
@@ -573,7 +614,7 @@ def save_scan(scan_result: dict, db_path: Path = DEFAULT_DB_PATH) -> int:
         conn.close()
 
 
-def delete_scan(scan_id: int, db_path: Path = DEFAULT_DB_PATH) -> bool:
+def delete_scan(scan_id: int, db_path=None) -> bool:
     """
     Delete a scan. Its cookies and third-party rows go too, automatically.
 
@@ -598,7 +639,7 @@ def delete_scan(scan_id: int, db_path: Path = DEFAULT_DB_PATH) -> bool:
 # READING
 # ---------------------------------------------------------------------------
 
-def list_domains(db_path: Path = DEFAULT_DB_PATH) -> list:
+def list_domains(db_path=None) -> list:
     """
     Every domain we've scanned, with summary stats.
 
@@ -652,7 +693,7 @@ def list_domains(db_path: Path = DEFAULT_DB_PATH) -> list:
 
 
 def get_scans_for_domain(domain: str, limit: int = 50,
-                         db_path: Path = DEFAULT_DB_PATH) -> list:
+                         db_path=None) -> list:
     """
     Scan history for one domain, newest first.
 
@@ -678,7 +719,7 @@ def get_scans_for_domain(domain: str, limit: int = 50,
         conn.close()
 
 
-def get_scan(scan_id: int, db_path: Path = DEFAULT_DB_PATH) -> dict:
+def get_scan(scan_id: int, db_path=None) -> dict:
     """One scan with its cookies and third-party domains. None if not found."""
     conn = get_connection(db_path)
     try:
@@ -733,7 +774,7 @@ def get_scan(scan_id: int, db_path: Path = DEFAULT_DB_PATH) -> dict:
         conn.close()
 
 
-def get_latest_scan(domain: str, db_path: Path = DEFAULT_DB_PATH) -> dict:
+def get_latest_scan(domain: str, db_path=None) -> dict:
     """The most recent scan for a domain, fully populated."""
     scans = get_scans_for_domain(domain, limit=1, db_path=db_path)
     if not scans:
@@ -741,7 +782,7 @@ def get_latest_scan(domain: str, db_path: Path = DEFAULT_DB_PATH) -> dict:
     return get_scan(scans[0]["id"], db_path=db_path)
 
 
-def get_domain_report(domain: str, db_path: Path = DEFAULT_DB_PATH) -> dict:
+def get_domain_report(domain: str, db_path=None) -> dict:
     """
     The compliance summary for a domain: latest state, history and trend.
 
