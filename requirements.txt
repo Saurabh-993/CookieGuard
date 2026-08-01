@@ -21,6 +21,17 @@
 # Playwright drives a REAL browser (Chromium) from Python so we can
 # see every cookie a site actually sets, including ones created by
 # JavaScript after the page loads.
+#
+# ⚠ IF YOU RUN LOCALLY *AND* IN DOCKER, KEEP THESE ALIGNED.
+# Playwright is the one dependency coupled to something outside Python: the
+# browser binaries on disk. The Docker image pins it to match its base image
+# (see `ARG PLAYWRIGHT_VERSION` in the Dockerfile), so a floating range here
+# is fine for the container — the Dockerfile constrains it.
+#
+# Locally, `playwright install chromium` downloads whatever your installed
+# package expects, so local stays consistent by itself. The failure only
+# happens when a floating package meets a fixed browser directory, which is
+# exactly what a base image is.
 playwright>=1.48
 
 # tldextract gives us Mozilla's Public Suffix List, which is the only correct

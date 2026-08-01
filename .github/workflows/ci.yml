@@ -254,6 +254,46 @@ jobs:
           curl -fsS http://127.0.0.1:8000/dashboard/ | grep -q "CookieGuard" \
             && echo "Dashboard OK"
 
+      # ---- ⚠ THE STEP THIS JOB WAS MISSING ---------------------------------
+      # The first image built by this workflow started cleanly, reported
+      # healthy, and served the dashboard — and every scan failed, because the
+      # Playwright PACKAGE had resolved to a newer version than the browsers
+      # baked into the base image.
+      #
+      # None of the checks above could see it. They exercise the web layer;
+      # the browser only starts when someone clicks Scan. So the smoke test
+      # was verifying the easy half.
+      #
+      # The lesson generalises past this bug:
+      #
+      #   A smoke test must exercise the thing MOST LIKELY TO BREAK, not the
+      #   thing easiest to check. For us that is the headless browser — the
+      #   heaviest dependency, the one coupled to the base image, and the one
+      #   with the most moving parts.
+      #
+      # example.com is deliberate: tiny, stable, no consent banner, no
+      # geo-gating, and it will not rate-limit a CI runner.
+      - name: Verify Chromium actually runs a scan
+        run: |
+          curl -fsS --max-time 90 -X POST http://127.0.0.1:8000/api/scan \
+            -H 'Content-Type: application/json' \
+            -d '{"url":"https://example.com","wait_seconds":3,"save":false}' \
+            -o /tmp/scan.json
+
+          cat /tmp/scan.json
+
+          # `error` must be null. A scan that fails to launch the browser
+          # still returns HTTP 200 with the failure recorded in the body —
+          # which is correct API design, and means `curl -f` alone would pass.
+          python3 -c "
+          import json, sys
+          r = json.load(open('/tmp/scan.json'))
+          if r.get('error'):
+              print('::error::Scan reported an error:', r['error'])
+              sys.exit(1)
+          print('Scan OK —', r['cookie_count'], 'cookies from', r['domain'])
+          "
+
       # `if: always()` runs this even when an earlier step failed. Without it a
       # failure leaves the container running and the log is never collected —
       # exactly when you most want it.
@@ -296,6 +336,21 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # ⚠ LOWERCASE THE IMAGE NAME.
+      # `github.repository` is "Saurabh-993/CookieGuard" — with capitals,
+      # because that's how the repo is named. Container registries require
+      # lowercase image paths and reject anything else with:
+      #     invalid reference format: repository name must be lowercase
+      #
+      # This would have failed on the first push to main, at the very last
+      # step, after everything else went green. GitHub's expression language
+      # has no lower() function, so it's done here in shell and passed on via
+      # $GITHUB_OUTPUT — the standard way one step hands a value to the next.
+      - name: Lowercase the image name
+        id: img
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        # ${VAR,,} is bash parameter expansion for "lowercase everything".
+
       # TAGGING STRATEGY — two tags, for two different needs:
       #   :latest         convenient, but ambiguous. "latest" tells you nothing
       #                   about WHAT is running.
@@ -309,7 +364,7 @@ jobs:
           context: .
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}:latest
-            ghcr.io/${{ github.repository }}:${{ github.sha }}
+            ghcr.io/${{ steps.img.outputs.name }}:latest
+            ghcr.io/${{ steps.img.outputs.name }}:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

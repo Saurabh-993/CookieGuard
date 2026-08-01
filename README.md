@@ -20,6 +20,7 @@ In short: **a simplified, open-source version of what OneTrust does.**
 - [How to Run](#-how-to-run)
 - [Run with Docker](#-run-with-docker)
 - [Continuous Integration](#-continuous-integration)
+- [Deploy to AWS](#-deploy-to-aws)
 - [API Documentation](#-api-documentation)
 - [Screenshots](#-screenshots)
 - [Build Phases](#-build-phases)
@@ -524,6 +525,51 @@ with an older one.
 
 ---
 
+## ☁️ Deploy to AWS
+
+Phase 7 — **available now.** Full step-by-step playbook: **[`deploy/README.md`](deploy/README.md)**
+
+```
+        internet
+           │ HTTPS
+           ▼
+   ┌──────────────────────────────────────────┐
+   │  EC2 t3.micro · Ubuntu 24.04 · 1 GB RAM  │
+   │   ┌───────┐        ┌────────────────┐    │
+   │   │ Caddy │───────►│  cookieguard   │    │
+   │   │ :443  │  :8000 │  (no public    │    │
+   │   └───────┘        │   port at all) │    │
+   │    Let's Encrypt   └───────┬────────┘    │
+   │    auto-renewed        /data volume      │
+   └──────────────────────────────────────────┘
+                  ▲
+                  │ docker pull  (never builds)
+            ghcr.io/<you>/cookieguard:<sha>
+```
+
+**Cost: $0** on the 12-month free tier, with a free DuckDNS hostname and a free
+Let's Encrypt certificate. (~$2/year if you'd rather own a real domain.)
+
+Once the server is bootstrapped, deploying is:
+
+```bash
+cd ~/cookieguard/deploy && ./deploy.sh
+```
+
+Three decisions worth knowing:
+
+- **The server pulls, it never builds.** Production runs the bit-identical
+  artifact CI smoke-tested — not "the same source, rebuilt, hopefully the same
+  way". A t3.micro would also take ~20 minutes and might run out of memory.
+- **The app container publishes no port.** Only Caddy is reachable. Publishing
+  8000 would bypass TLS and every security header, and automated scanners sweep
+  the public IPv4 space continuously — obscurity buys about twenty minutes.
+- **A 2 GB swap file is mandatory.** 1 GB of RAM plus a headless Chromium means
+  the OOM killer fires during scans, and it often picks `sshd` rather than the
+  process at fault — so you can't log in to diagnose it.
+
+---
+
 ### Run the tests
 
 ```bash
@@ -753,7 +799,7 @@ Once the API exists, FastAPI will auto-generate live, testable documentation at
 | **4** | Dashboard (tables + charts + audit report) | ✅ **Done** |
 | **5** | Consent banner | ✅ **Done** |
 | **6** | Docker + GitHub Actions CI/CD | ✅ **Done** |
-| **7** | AWS deployment | ⬜ Next |
+| **7** | AWS deployment (EC2 + Caddy + HTTPS) | ✅ **Done** |
 
 ---
 

@@ -55,12 +55,38 @@
 # Using the maintained image is not laziness — it's declining to re-solve a
 # problem the vendor already solved and keeps solving.
 #
-# ⚠ THE VERSION MUST MATCH requirements.lock.txt.
-# The Playwright Python package and the browser binaries are released as a
-# matched pair; mixing them produces protocol errors that read like bugs in
-# your own code. When you bump `playwright` in the lock file, bump this tag in
-# the same commit.
-FROM mcr.microsoft.com/playwright/python:v1.61.0-noble
+# ⚠⚠ THE VERSION-DRIFT BUG — this comment used to say "remember to keep these
+# in sync", and a comment is not a mechanism. It drifted on the first build.
+#
+# WHAT HAPPENED
+# -------------
+# requirements.txt says `playwright>=1.48` (a RANGE, deliberately — see KI-6:
+# exact pins broke installs when no wheel existed for the user's Python). uv
+# resolved that to the newest release, 1.62.0, and installed it OVER the
+# base image's 1.61.0.
+#
+# The browsers, though, are baked into the image at 1.61's paths. So the
+# Python package went looking for:
+#     /ms-playwright/chromium_headless_shell-1234/chrome-headless-shell
+# which 1.61's image doesn't contain. Every scan failed with:
+#     "Executable doesn't exist … Please update docker image as well."
+#
+# The app started. Health was green. CI was green. Only an actual scan failed.
+#
+# THE FIX — one variable, used in BOTH places, so they cannot drift
+# -----------------------------------------------------------------
+# `ARG` before `FROM` is in Docker's *global scope*: it can be used in the
+# FROM line, but it is NOT visible inside the build stage. That's why it is
+# declared a second time after FROM — a genuine Docker quirk that catches
+# everyone once.
+#
+# To upgrade Playwright, change this ONE line and rebuild.
+ARG PLAYWRIGHT_VERSION=1.61.0
+
+FROM mcr.microsoft.com/playwright/python:v${PLAYWRIGHT_VERSION}-noble
+
+# Re-declare, so the value is visible to RUN instructions below.
+ARG PLAYWRIGHT_VERSION
 
 
 # -----------------------------------------------------------------------------
@@ -118,8 +144,46 @@ COPY requirements.txt requirements.lock.txt ./
 # --system installs into the image's Python rather than a virtualenv. A venv
 # inside a container is a layer of indirection protecting you from a conflict
 # that cannot happen: nothing else lives in this image.
+# ⚠ NOTE THE TRAILING `playwright==${PLAYWRIGHT_VERSION}`.
+#
+# That extra argument is what stops the drift. It gives the resolver a hard
+# constraint, so `playwright>=1.48` from requirements.txt is satisfied by
+# EXACTLY the version whose browsers this image contains — instead of by
+# whatever was released this morning.
+#
+# This does not weaken the "pin the interpreter, float the libraries" rule from
+# KI-6. That rule exists so a missing wheel can't break an install. Playwright
+# is the one dependency that is genuinely coupled to something outside Python
+# — the browser binaries on disk — so it is the one that must be pinned, and
+# it's pinned to a value derived from the base image rather than typed twice.
 RUN pip install --no-cache-dir uv==0.9.7 \
- && uv pip install --system --no-cache -r requirements.txt
+ && uv pip install --system --no-cache -r requirements.txt \
+      "playwright==${PLAYWRIGHT_VERSION}"
+
+# ---- Prove it, at BUILD time -------------------------------------------
+# Two assertions, because the failure this catches was invisible until a user
+# clicked Scan:
+#
+#   1. the installed package version is the one we pinned
+#   2. Chromium ACTUALLY LAUNCHES
+#
+# The second is the one that matters. Version numbers agreeing is a proxy;
+# launching the browser is the thing we actually care about. It costs about
+# two seconds and turns a runtime failure into a failed build — which is
+# always the better place for a failure to happen.
+#
+# `--no-sandbox` here ONLY: the build runs as root inside BuildKit, where
+# Chromium refuses to start sandboxed. At runtime the sandbox stays on.
+RUN set -eux; \
+    INSTALLED="$(python -c 'import importlib.metadata as m; print(m.version("playwright"))')"; \
+    test "$INSTALLED" = "$PLAYWRIGHT_VERSION" \
+      || { echo "MISMATCH: package $INSTALLED vs image $PLAYWRIGHT_VERSION"; exit 1; }; \
+    python -c "\
+from playwright.sync_api import sync_playwright; \
+p = sync_playwright().start(); \
+b = p.chromium.launch(args=['--no-sandbox']); \
+print('chromium', b.version, 'launches OK'); \
+b.close(); p.stop()"
 
 # NOTE: no `playwright install` step. The base image already ships the browser
 # binaries. Running it would re-download ~150MB for nothing.

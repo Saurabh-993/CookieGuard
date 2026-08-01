@@ -1,0 +1,108 @@
+# =============================================================================
+# CookieGuard — Caddy reverse proxy (Phase 7)
+# =============================================================================
+#
+# WHAT A REVERSE PROXY IS
+# -----------------------
+# A normal ("forward") proxy sits in front of a CLIENT and fetches things on
+# its behalf. A REVERSE proxy sits in front of a SERVER and receives requests
+# on its behalf.
+#
+#     internet ──► :443 Caddy ──► :8000 cookieguard
+#                    │                (not reachable from outside)
+#                    └── TLS terminates here
+#
+# WHY NOT JUST EXPOSE UVICORN ON PORT 443 DIRECTLY?
+#   · TLS certificates — Caddy obtains and renews them automatically. Doing it
+#     in the app means handling ACME, renewal, and reloading without downtime.
+#   · Ports below 1024 need root on Linux. Our app deliberately runs unprivileged.
+#   · One public entry point can serve several apps later, by hostname.
+#   · Caddy handles slow-client attacks and malformed requests, so uvicorn only
+#     ever sees well-formed HTTP. That's a real, cheap security boundary.
+#
+# WHY CADDY AND NOT NGINX
+# -----------------------
+# nginx is the industry default and worth learning eventually. But an nginx
+# HTTPS setup means: an nginx config, certbot installed, a cron renewal timer,
+# a reload hook, and a chicken-and-egg problem where nginx won't start until
+# the certificate exists but certbot needs nginx running to get it.
+#
+# Caddy does all of that in the four lines below. It requests a Let's Encrypt
+# certificate on first boot, renews it ~30 days before expiry, redirects HTTP
+# to HTTPS, and enables HTTP/2 — with no flags.
+#
+# The honest trade-off: nginx appears in more job descriptions. If you're asked
+# in an interview, say you chose Caddy for automatic certificate management and
+# that you know nginx + certbot is the more conventional pairing.
+# =============================================================================
+
+
+# THE SITE ADDRESS
+# ----------------
+# `{$SITE_ADDRESS}` reads an environment variable, so this file is not tied to
+# one hostname — the same file works for your DuckDNS name and later for a real
+# domain. Set it in deploy/.env.
+#
+# ⚠ The hostname MUST already resolve to this server's public IP before Caddy
+# starts. Let's Encrypt proves you control the domain by fetching a file from
+# it over HTTP; if DNS isn't pointing here yet, the challenge fails and Caddy
+# retries with a backoff. Check DNS first — see deploy/README.md step 7.
+{$SITE_ADDRESS} {
+
+	# Send everything to the app container. `cookieguard` is a hostname here,
+	# not a guess: Docker's built-in DNS resolves service names on the same
+	# compose network to that container's internal IP. This is why the app does
+	# NOT need to publish port 8000 to the host at all — Caddy reaches it over
+	# the private container network, and the outside world cannot.
+	reverse_proxy cookieguard:8000
+
+	# ---- Logging -----------------------------------------------------------
+	# Caddy defaults to no access log. Without one you cannot answer "is anyone
+	# using this?" or "where did that traffic come from?".
+	log {
+		output file /var/log/caddy/access.log {
+			roll_size 10mb
+			roll_keep 5
+		}
+		format json
+	}
+
+	# ---- Security headers --------------------------------------------------
+	# Cheap, and it would be a poor look for a PRIVACY COMPLIANCE TOOL to score
+	# badly on securityheaders.com. Worth being able to explain each one:
+	header {
+		# HSTS: after the first visit, the browser refuses to use plain HTTP for
+		# this domain for a year — even if a user types http://. This closes the
+		# window where an attacker on the same network downgrades the first
+		# request. Do NOT enable this until HTTPS definitely works: browsers
+		# remember it, and you cannot un-remember it for your visitors.
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+
+		# Stops the browser guessing a file's type from its content. Without it
+		# a file that we serve as text could be executed as a script.
+		X-Content-Type-Options "nosniff"
+
+		# Blocks other sites from embedding this one in an iframe — the defence
+		# against clickjacking, where an invisible frame sits over a real page
+		# and steals clicks.
+		X-Frame-Options "DENY"
+
+		# Don't leak the full URL of our pages to sites we link to.
+		Referrer-Policy "strict-origin-when-cross-origin"
+
+		# Don't advertise the server software and version. Minor, but free.
+		-Server
+	}
+
+	# ---- Compression -------------------------------------------------------
+	# style.css and app.js are large, comment-heavy text files. gzip typically
+	# cuts them by 70-80%, which matters on the free tier's bandwidth allowance
+	# and matters more to anyone loading this on mobile data.
+	encode gzip
+}
+
+# NOTE: there is deliberately no `:80` block. Caddy automatically serves an
+# HTTP-to-HTTPS redirect for every site it manages, and handles the ACME
+# challenge on port 80 itself. Adding a block here would override that and
+# break certificate renewal — a genuinely common way to end up with an expired
+# certificate three months later.
