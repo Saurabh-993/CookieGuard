@@ -126,8 +126,24 @@ else
     | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
   sudo chmod a+r /etc/apt/keyrings/docker.gpg
 
+  # ---- Pick a codename Docker actually publishes for -----------------------
+  # Docker's repo is per Ubuntu release, and it can lag a new release by
+  # months. On a brand-new Ubuntu the naive version of this line adds a repo
+  # that returns 404, `apt-get update` fails, and `set -e` aborts the whole
+  # script — halfway through, which is the worst place to stop.
+  #
+  # So: ask the repo whether it knows this codename, and fall back to the most
+  # recent LTS if not. Docker's packages are built against glibc and work fine
+  # across adjacent Ubuntu releases; using noble's packages on a newer Ubuntu
+  # is a well-trodden path, not a hack.
+  CODENAME="$(. /etc/os-release && echo "$VERSION_CODENAME")"
+  if ! curl -fsI "https://download.docker.com/linux/ubuntu/dists/${CODENAME}/Release" > /dev/null 2>&1; then
+    warn "Docker has no repo for Ubuntu '${CODENAME}' yet — falling back to 'noble' (24.04 LTS)."
+    CODENAME="noble"
+  fi
+
   echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
-https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" \
+https://download.docker.com/linux/ubuntu ${CODENAME} stable" \
     | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
 
   sudo apt-get update -qq

@@ -37,3 +37,4 @@ docs/*.md
 
 # Linter / formatter caches
 .ruff_cache/
+deploy/walkthrough.md
