@@ -8,6 +8,12 @@ In short: **a simplified, open-source version of what OneTrust does.**
 
 ---
 
+[![CI](https://github.com/Saurabh-993/CookieGuard/actions/workflows/ci.yml/badge.svg)](https://github.com/Saurabh-993/CookieGuard/actions/workflows/ci.yml)
+[![Live](https://img.shields.io/badge/live-cookieguard.duckdns.org-brightgreen)](https://cookieguard-saurabh.duckdns.org/dashboard/)
+[![SSL Labs](https://img.shields.io/badge/SSL%20Labs-A%2B-brightgreen)](https://www.ssllabs.com/ssltest/analyze.html?d=cookieguard-saurabh.duckdns.org)
+[![Tests](https://img.shields.io/badge/tests-260%20passing-brightgreen)](https://github.com/Saurabh-993/CookieGuard/actions)
+[![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
+
 ## 📖 Table of Contents
 
 - [The Problem](#-the-problem)
