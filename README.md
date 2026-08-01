@@ -14,6 +14,8 @@ In short: **a simplified, open-source version of what OneTrust does.**
 [![Tests](https://img.shields.io/badge/tests-260%20passing-brightgreen)](https://github.com/Saurabh-993/CookieGuard/actions)
 [![Python](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 
+![CookieGuard dashboard](docs/images/dashboard-https.png)
+
 ## 📖 Table of Contents
 
 - [The Problem](#-the-problem)
